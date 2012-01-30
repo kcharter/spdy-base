@@ -23,11 +23,9 @@ Cabal-version:       >=1.2
 
 
 Library
-  -- Modules exported by the library.
-  -- Exposed-modules:     
+  Exposed-modules:     Network.SPDY.Frames
   
-  -- Packages needed in order to build this package.
-  -- Build-depends:       
+  Build-depends:       base >= 3 && < 5
   
   -- Modules not exported by this package.
   -- Other-modules:       
