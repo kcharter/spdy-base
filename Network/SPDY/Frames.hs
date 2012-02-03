@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 {- |
 
 Data types for representing SPDY frames.
@@ -229,7 +231,9 @@ data TerminationStatus =
 newtype SPDYVersion = SPDYVersion Word16 deriving (Eq, Show, Read)
 
 -- | The length of the data payload in a frame. Only 24 bits are used.
-newtype DataLength = DataLength Word32 deriving (Eq, Show, Read)
+newtype DataLength =
+  DataLength Word32
+  deriving (Eq, Ord, Show, Read, Bounded, Enum, Num, Real, Integral)
 
 -- | Identifies a stream within a SPDY connection. Only 31 bits are
 -- used.
