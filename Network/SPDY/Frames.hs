@@ -227,7 +227,7 @@ data TerminationStatus =
   -- library. This is *not* part of the SPDY spec.
   deriving (Eq, Show, Read)
 
--- | The version of the SPDY protocol. Only 15 bytes are used.
+-- | The version of the SPDY protocol. Only 15 bits are used.
 newtype SPDYVersion = SPDYVersion Word16 deriving (Eq, Show, Read)
 
 -- | The length of the data payload in a frame. Only 24 bits are used.
