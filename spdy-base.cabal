@@ -3,20 +3,20 @@ Version:             0.1
 Synopsis:            Frame data types, serialization and deserialization.
 
 -- A longer description of the package.
--- Description:         
+-- Description:
 
 Homepage:            https://github.com/kcharter/spdy-base.git
 License:             BSD3
 License-file:        LICENSE
 Author:              Kevin Charter
 Maintainer:          kevin.charter@acm.org
--- Copyright:           
+-- Copyright:
 Category:            Web
 Build-type:          Simple
 
 -- Extra files to be distributed with the package, such as examples or
 -- a README.
--- Extra-source-files:  
+-- Extra-source-files:
 
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.2
@@ -26,15 +26,24 @@ Library
   Exposed-modules:     Network.SPDY.Frames,
                        Network.SPDY.Deserialize,
                        Network.SPDY.Serialize
-  
+
   Build-depends:       attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
                        bytestring >= 0.9 && < 0.10
-  
+
   -- Modules not exported by this package.
-  -- Other-modules:       
-  
+  -- Other-modules:
+
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
-  -- Build-tools:         
-  
+  -- Build-tools:
+
+Test-Suite tests
+  type:                 exitcode-stdio-1.0
+  main-is:              test/Main.hs
+  hs-source-dirs:       ".", test
+  build-depends:        QuickCheck >= 2 && <= 3,
+                        attoparsec >= 0.10 && < 1,
+                        base >= 3 && < 5,
+                        blaze-builder >= 0.3 && < 1,
+                        bytestring >= 0.9 && < 0.10
