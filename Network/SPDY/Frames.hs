@@ -230,6 +230,10 @@ data TerminationStatus =
 -- | The version of the SPDY protocol. Only 15 bits are used.
 newtype SPDYVersion = SPDYVersion Word16 deriving (Eq, Show, Read)
 
+-- | Extracts the raw version word from a 'SPDYVersion'.
+rawSPDYVersion :: SPDYVersion -> Word16
+rawSPDYVersion (SPDYVersion w) = w
+
 -- | The length of the data payload in a frame. Only 24 bits are used.
 newtype DataLength =
   DataLength Word32
@@ -238,6 +242,10 @@ newtype DataLength =
 -- | Identifies a stream within a SPDY connection. Only 31 bits are
 -- used.
 newtype StreamID = StreamID Word32 deriving (Eq, Show, Read)
+
+-- | Extracts the raw stream ID word from a 'StreamID'.
+rawStreamID :: StreamID -> Word32
+rawStreamID (StreamID w) = w
 
 -- | The priority of a stream. Legal numeric values range from @0@ to
 -- @7@, @0@ being the highest priority.
