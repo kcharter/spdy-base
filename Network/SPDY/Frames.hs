@@ -47,9 +47,11 @@ data RawFrame =
   RawFrame
   { frameHeader :: RawFrameHeader
   , flagsByte :: Word8
-  , payloadLength :: DataLength
   , payload :: ByteString
   } deriving (Eq, Show, Read)
+
+payloadLength :: RawFrame -> DataLength
+payloadLength = fromIntegral . BSC8.length . payload
 
 -- | The parts of a raw frame that are unique to control frames and
 -- data frames. This represents the contents of the first four bytes

@@ -31,7 +31,7 @@ parseRawFrame = do
   flags   <- anyWord8
   payloadLength <- parseDataLength
   payload <- AP.take $ fromIntegral payloadLength
-  return $ RawFrame header flags payloadLength payload
+  return $ RawFrame header flags payload
 
 parseFrameHeader :: Parser RawFrameHeader
 parseFrameHeader = fromBytes <$> anyWord8 <*> anyWord8 <*> anyWord8 <*> anyWord8

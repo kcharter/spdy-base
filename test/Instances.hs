@@ -13,7 +13,6 @@ instance Arbitrary RawFrame where
     (RawFrame <$>
      arbitrary <*>
      arbitrary <*>
-     return pl <*>
      payloadBytes pl)
 
 instance Arbitrary RawFrameHeader where
