@@ -90,6 +90,8 @@ data Frame =
   DataFrame
   { streamID :: StreamID
     -- ^ Identifies the stream to which the accompanying data belongs.
+  , dataFlags :: [DataFlag]
+    -- ^ Flags for the data frame.
   , dataBytes :: ByteString
     -- ^ The raw data.
   }
@@ -179,6 +181,14 @@ data ControlFrameDetails =
     -- ^ The additional number of bytes that the sender can transmit
     -- in addition to the remaining window size.
   }
+  deriving (Eq, Show, Read)
+
+data DataFlag =
+  DataFlagFin |
+  -- ^ The enclosing frame is the last one transmitted by the sender
+  -- in this stream.
+  DataFlagUnknown Word8
+  -- ^ Unsupported by this library (not in the SPDY spec).
   deriving (Eq, Show, Read)
 
 -- | Flags used in the 'SynStream' frame.
