@@ -50,6 +50,7 @@ data RawFrame =
   , payload :: ByteString
   } deriving (Eq, Show, Read)
 
+-- | Get the number of bytes in the payload of a raw frame.
 payloadLength :: RawFrame -> DataLength
 payloadLength = fromIntegral . BSC8.length . payload
 
