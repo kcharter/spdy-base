@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 {- |
 
@@ -18,9 +19,12 @@ draft that expires in November 2011.
 
 module Network.SPDY.Frames where
 
+import Data.Bits (Bits)
 import Data.Word
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
+
+import Network.SPDY.Flags
 
 -- | The compression dictionary to use for the zlib compression of headers.
 compressionDictionary :: ByteString
@@ -90,7 +94,7 @@ data Frame =
   DataFrame
   { streamID :: StreamID
     -- ^ Identifies the stream to which the accompanying data belongs.
-  , dataFlags :: [DataFlag]
+  , dataFlags :: DataFlags
     -- ^ Flags for the data frame.
   , dataBytes :: ByteString
     -- ^ The raw data.
@@ -102,7 +106,7 @@ data Frame =
 data ControlFrameDetails =
   -- | Request to create a new stream.
   SynStream
-  { synStreamFlags :: [SynStreamFlag]
+  { synStreamFlags :: SynStreamFlags
     -- ^ Flags for stream creation.
   , newStreamID :: StreamID
     -- ^ Uniquely identifies the new stream.
@@ -117,7 +121,7 @@ data ControlFrameDetails =
   } |
   -- | Acknowledges receipt of a 'SynStream' frame.
   SynReply
-  { synReplyFlags :: [SynReplyFlag]
+  { synReplyFlags :: SynReplyFlags
     -- ^ Flags for the reply.
   , newStreamID :: StreamID
     -- ^ The same stream ID as in the 'SynStream' frame.
@@ -136,7 +140,7 @@ data ControlFrameDetails =
   -- | Exchange settings, and request or acknowledge that they have
   -- been persisted or cleared.
   Settings
-  { settingsFlags :: [SettingsFlag]
+  { settingsFlags :: SettingsFlags
   , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
   } |
   -- | Used for estimating the minimum round-trip time from the
@@ -163,7 +167,7 @@ data ControlFrameDetails =
   } |
   -- | Augments an existing stream with additional headers.
   Headers
-  { headersFlags :: [HeadersFlag]
+  { headersFlags :: HeadersFlags
   , headersStreamID :: StreamID
     -- ^ The stream ID of the stream to which the headers apply.
   , headerBlock :: HeaderBlock
@@ -183,33 +187,46 @@ data ControlFrameDetails =
   }
   deriving (Eq, Show, Read)
 
+newtype DataFlags = DataFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
 data DataFlag =
   DataFlagFin |
   -- ^ The enclosing frame is the last one transmitted by the sender
   -- in this stream.
-  DataFlagUnknown Word8
-  -- ^ Unsupported by this library (not in the SPDY spec).
+  DataFlagCompress
+  -- ^ The data in the enclosing frame has been compressed.
   deriving (Eq, Show, Read)
+
+instance Flag DataFlag DataFlags where
+  bit DataFlagFin = 0
+  bit DataFlagCompress = 1
+
+newtype SynStreamFlags = SynStreamFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
 
 -- | Flags used in the 'SynStream' frame.
 data SynStreamFlag =
   SynStreamFlagFin |
   -- ^ The enclosing frame is the last to be transmitted on this
   -- stream and the sender is in the half-closed state.
-  SynStreamFlagUnidirectional |
+  SynStreamFlagUnidirectional
   -- ^ The recipient should start in the half-closed state.
-  SynStreamFlagUnknown Word8
-  -- ^ Unsupported by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
+
+instance Flag SynStreamFlag SynStreamFlags where
+  bit SynStreamFlagFin = 0
+  bit SynStreamFlagUnidirectional = 1
+
+newtype SynReplyFlags = SynReplyFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
 
 -- | Flags used in the 'SynReply' frame.
 data SynReplyFlag =
-  SynReplyFlagFin |
+  SynReplyFlagFin
   -- ^ The enclosing frame is the last to be transmitted on this
   -- stream and the sender is in the half-closed state.
-  SynReplyFlagUnknown Word8
-  -- ^ Unsupported by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
+
+instance Flag SynReplyFlag SynReplyFlags where
+  bit SynReplyFlagFin = 0
 
 -- | The various reasons why a stream could be terminated abnormally
 -- with a 'RstStream' frame.
@@ -289,16 +306,18 @@ newtype HeaderValue = HeaderValue ByteString deriving (Eq, Show, Read)
 -- | A settings ID paired with a list of settings flags.
 data SettingIDAndFlags =
   SettingIDAndFlags
-  { settingIDFlags :: [SettingIDFlag]
+  { settingIDFlags :: SettingIDFlags
     -- ^ The flags.
   , settingID :: SettingID
     -- ^ The setting ID itself.
   }
   deriving (Eq, Show, Read)
 
+newtype SettingsFlags = SettingsFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
 -- | Flags for a 'Settings' control frame.
 data SettingsFlag =
-  SettingsFlagClearSettings |
+  SettingsFlagClearSettings
   -- ^ When set, the client should clear and previously persisted
   -- settings. If this frame contains ID/Value pairs with the flag
   -- 'SettingIDFlagPersistValue' set, then the client will first clear
@@ -306,10 +325,12 @@ data SettingsFlag =
   -- the flag set contained in this frame. Because persistence is
   -- implemented only on the client, this flag should be sent only by
   -- the server.
-  SettingsFlagUnknown Word8
-  -- ^ Settings flags that aren't understood by this library. This is
-  -- *not* part of the SPDY spec.
   deriving (Eq, Show, Read)
+
+instance Flag SettingsFlag SettingsFlags where
+  bit SettingsFlagClearSettings = 0
+
+newtype SettingIDFlags = SettingIDFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
 
 -- | Flags that appear as part of a 'SettingID'.
 data SettingIDFlag =
@@ -326,6 +347,10 @@ data SettingIDFlag =
   -- it. Because persistence is implemented only on the client, this
   -- flag is sent only by the client.
   deriving (Eq, Show, Read)
+
+instance Flag SettingIDFlag SettingIDFlags where
+  bit SettingIDFlagPersistValue = 0
+  bit SettingIDFlagPersisted = 1
 
 -- | A setting ID. IDs defined in the specification are given their
 -- own variants, with 'SettingsOther' as a catch-all for unrecognized
@@ -381,14 +406,17 @@ data GoAwayStatus =
   -- ^ Unrecognized by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
 
+newtype HeadersFlags = HeadersFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
 -- | Flags used in a 'Headers' control frame.
 data HeadersFlag =
-  HeadersFlagFin |
+  HeadersFlagFin
   -- ^ The enclosing frame is the last the sender will transmit on
   -- this stream, and the sender is now in the half-closed state.
-  HeadersFlagUnknown Word8
-  -- ^ Unrecognized by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
+
+instance Flag HeadersFlag HeadersFlags where
+  bit HeadersFlagFin = 0
 
 -- | The number of bytes now free in the sender's data transfer
 -- window.
