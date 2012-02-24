@@ -77,6 +77,30 @@ data RawFrameHeader =
   }
   deriving (Eq, Show, Read)
 
+cftSynStream:: Word16
+cftSynStream = 0x1
+
+cftSynReply :: Word16
+cftSynReply = 0x2
+
+cftRstStream :: Word16
+cftRstStream = 0x3
+
+cftSettings :: Word16
+cftSettings = 0x4
+
+cftPing :: Word16
+cftPing = 0x6
+
+cftGoAway :: Word16
+cftGoAway = 0x7
+
+cftHeaders :: Word16
+cftHeaders = 0x8
+
+cftWindowUpdate :: Word16
+cftWindowUpdate = 0x9
+
 -- | The more heavily-processed form of a SPDY frame. For control
 -- frames, the data payload is replaced by a data type representing
 -- the contents of the payload.
