@@ -25,6 +25,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
 
 import Network.SPDY.Flags
+import Network.SPDY.ToWord8
 
 -- | The compression dictionary to use for the zlib compression of headers.
 compressionDictionary :: ByteString
@@ -213,6 +214,9 @@ data ControlFrameDetails =
 
 newtype DataFlags = DataFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
 
+instance ToWord8 DataFlags where
+  toWord8 (DataFlags w) = w
+
 data DataFlag =
   DataFlagFin |
   -- ^ The enclosing frame is the last one transmitted by the sender
@@ -226,6 +230,9 @@ instance Flag DataFlag DataFlags where
   bit DataFlagCompress = 1
 
 newtype SynStreamFlags = SynStreamFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
+instance ToWord8 SynStreamFlags where
+  toWord8 (SynStreamFlags w) = w
 
 -- | Flags used in the 'SynStream' frame.
 data SynStreamFlag =
@@ -241,6 +248,9 @@ instance Flag SynStreamFlag SynStreamFlags where
   bit SynStreamFlagUnidirectional = 1
 
 newtype SynReplyFlags = SynReplyFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
+instance ToWord8 SynReplyFlags where
+  toWord8 (SynReplyFlags w) = w
 
 -- | Flags used in the 'SynReply' frame.
 data SynReplyFlag =
@@ -339,6 +349,9 @@ data SettingIDAndFlags =
 
 newtype SettingsFlags = SettingsFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
 
+instance ToWord8 SettingsFlags where
+  toWord8 (SettingsFlags w) = w
+
 -- | Flags for a 'Settings' control frame.
 data SettingsFlag =
   SettingsFlagClearSettings
@@ -355,6 +368,9 @@ instance Flag SettingsFlag SettingsFlags where
   bit SettingsFlagClearSettings = 0
 
 newtype SettingIDFlags = SettingIDFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
+instance ToWord8 SettingIDFlags where
+  toWord8 (SettingIDFlags w) = w
 
 -- | Flags that appear as part of a 'SettingID'.
 data SettingIDFlag =
@@ -431,6 +447,9 @@ data GoAwayStatus =
   deriving (Eq, Show, Read)
 
 newtype HeadersFlags = HeadersFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
+
+instance ToWord8 HeadersFlags where
+  toWord8 (HeadersFlags w) = w
 
 -- | Flags used in a 'Headers' control frame.
 data HeadersFlag =

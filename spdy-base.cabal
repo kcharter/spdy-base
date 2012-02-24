@@ -26,7 +26,8 @@ Library
   Exposed-modules:     Network.SPDY.Flags,
                        Network.SPDY.Frames,
                        Network.SPDY.Deserialize,
-                       Network.SPDY.Serialize
+                       Network.SPDY.Serialize,
+                       Network.SPDY.ToWord8
 
   Build-depends:       attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
