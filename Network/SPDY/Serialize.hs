@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 {- |
 
 Serialization of SPDY frames to lazy 'ByteString's.
@@ -7,7 +9,7 @@ module Network.SPDY.Serialize
        (rawFrameToByteString, toRawFrame, frameToByteString) where
 
 import Blaze.ByteString.Builder
-import Data.Bits (setBit, shiftR, (.&.))
+import Data.Bits (setBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -111,6 +113,36 @@ toControlPayloadBuilder details =
       error "ni"
     WindowUpdate sid dws ->
       error "ni"
+
+class ToBuilder a where
+  toBuilder :: a -> Builder
+
+instance ToBuilder StreamID where
+  toBuilder (StreamID w) = fromWord32be w
+
+instance ToBuilder (Maybe StreamID) where
+  toBuilder = maybe (fromWord32be 0x0) toBuilder
+
+instance ToBuilder Priority where
+  toBuilder (Priority w) = fromWord8 (w `shiftL` 5)
+
+instance ToBuilder HeaderCount where
+  toBuilder (HeaderCount w) = fromWord32be w
+
+instance ToBuilder HeaderName where
+  toBuilder (HeaderName bs) = lengthAndBytes bs
+
+instance ToBuilder HeaderValue where
+  toBuilder (HeaderValue bs) = lengthAndBytes bs
+
+lengthAndBytes :: ByteString -> Builder
+lengthAndBytes bs = fromWord32be (fromIntegral $ B.length bs) `mappend` fromByteString bs
+
+instance ToBuilder PingID where
+  toBuilder (PingID w) = fromWord32be w
+
+instance ToBuilder DeltaWindowSize where
+  toBuilder (DeltaWindowSize w) = fromWord32be w
 
 -- | Converts a frame to a 'ByteString'.
 frameToByteString :: Frame -> ByteString
