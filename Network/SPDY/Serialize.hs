@@ -13,6 +13,7 @@ import Data.Bits (setBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
+import Data.List (foldl')
 import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
 
@@ -126,6 +127,10 @@ instance ToBuilder (Maybe StreamID) where
 instance ToBuilder Priority where
   toBuilder (Priority w) = fromWord8 (w `shiftL` 5)
 
+instance ToBuilder HeaderBlock where
+  toBuilder hb =
+    toBuilder (headerCount hb) `mappend` headerPairsBuilder (headerPairs hb)
+
 instance ToBuilder HeaderCount where
   toBuilder (HeaderCount w) = fromWord32be w
 
@@ -137,6 +142,11 @@ instance ToBuilder HeaderValue where
 
 lengthAndBytes :: ByteString -> Builder
 lengthAndBytes bs = fromWord32be (fromIntegral $ B.length bs) `mappend` fromByteString bs
+
+headerPairsBuilder :: [(HeaderName, HeaderValue)] -> Builder
+headerPairsBuilder =
+  foldl' mappend mempty . map fromPair
+    where fromPair (name, val) = toBuilder name `mappend` toBuilder val
 
 instance ToBuilder PingID where
   toBuilder (PingID w) = fromWord32be w
