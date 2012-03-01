@@ -9,10 +9,12 @@ module Network.SPDY.Serialize
        (rawFrameToByteString, toRawFrame, frameToByteString) where
 
 import Blaze.ByteString.Builder
+import Codec.Zlib (Deflate, withDeflateInput, flushDeflate)
 import Data.Bits (setBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
+import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.List (foldl')
 import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
@@ -45,11 +47,12 @@ rawHeaderBuilder header =
       fromWord32be (rawStreamID sid)
 
 -- | Converts a frame into a raw frame.
-toRawFrame :: Frame -> RawFrame
-toRawFrame frame =
-  RawFrame { frameHeader = toRawFrameHeader frame
-           , flagsByte = toFlagsByte frame
-           , payload = toPayload frame }
+toRawFrame :: Deflate -> Frame -> IO RawFrame
+toRawFrame deflate frame = do
+  pl <- toPayload deflate frame
+  return  RawFrame { frameHeader = toRawFrameHeader frame
+                   , flagsByte = toFlagsByte frame
+                   , payload = pl }
 
 toRawFrameHeader :: Frame -> RawFrameHeader
 toRawFrameHeader frame =
@@ -84,22 +87,24 @@ toFlagsByte frame =
     DataFrame _ f _ -> toWord8 f
 
 
-toPayload :: Frame -> ByteString
-toPayload frame =
+toPayload :: Deflate -> Frame -> IO ByteString
+toPayload deflate frame =
   case frame of
     ControlFrame _ d ->
-      toControlPayload d
+      toControlPayload deflate d
     DataFrame _ _ bs ->
-      bs
+      return bs
 
-toControlPayload :: ControlFrameDetails -> ByteString
-toControlPayload = toByteString . toControlPayloadBuilder
+toControlPayload :: Deflate -> ControlFrameDetails -> IO ByteString
+toControlPayload deflate = fmap toByteString . toControlPayloadBuilder deflate
 
-toControlPayloadBuilder :: ControlFrameDetails -> Builder
-toControlPayloadBuilder details =
+toControlPayloadBuilder :: Deflate -> ControlFrameDetails -> IO Builder
+toControlPayloadBuilder deflate details =
   case details of
     SynStream _ id sid pri hb ->
-      error "ni"
+      fmap (toBuilder id `mappend`
+            toBuilder sid `mappend`
+            toBuilder pri `mappend`) $ compressHeaderBlock deflate hb
     SynReply _ sid hb ->
       error "ni"
     RstStream sid status ->
@@ -126,6 +131,22 @@ instance ToBuilder (Maybe StreamID) where
 
 instance ToBuilder Priority where
   toBuilder (Priority w) = fromWord8 (w `shiftL` 5)
+
+compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder
+compressHeaderBlock deflate hb =
+  compress deflate $ toByteString $ toBuilder hb
+
+compress :: Deflate -> ByteString -> IO Builder
+compress deflate bs = do
+  bref <- newIORef mempty
+  let popper mbsIO = do
+        mbs <- mbsIO
+        maybe addEmpty addBS mbs
+      addEmpty = return ()
+      addBS bs = modifyIORef bref (`mappend` fromByteString bs)
+  withDeflateInput deflate bs popper
+  flushDeflate deflate popper
+  readIORef bref
 
 instance ToBuilder HeaderBlock where
   toBuilder hb =
@@ -155,5 +176,5 @@ instance ToBuilder DeltaWindowSize where
   toBuilder (DeltaWindowSize w) = fromWord32be w
 
 -- | Converts a frame to a 'ByteString'.
-frameToByteString :: Frame -> ByteString
-frameToByteString = rawFrameToByteString . toRawFrame
+frameToByteString :: Deflate -> Frame -> IO ByteString
+frameToByteString deflate = fmap rawFrameToByteString . toRawFrame deflate
