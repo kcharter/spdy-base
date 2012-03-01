@@ -78,7 +78,7 @@ data RawFrameHeader =
   }
   deriving (Eq, Show, Read)
 
-cftSynStream:: Word16
+cftSynStream :: Word16
 cftSynStream = 0x1
 
 cftSynReply :: Word16
