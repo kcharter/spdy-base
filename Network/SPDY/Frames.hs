@@ -329,7 +329,8 @@ data HeaderBlock =
   deriving (Eq, Show, Read)
 
 -- | The number of headers (name-value pairs) in a header block.
-newtype HeaderCount = HeaderCount Word32 deriving (Eq, Show, Read)
+newtype HeaderCount =
+  HeaderCount Word32 deriving (Eq, Show, Read, Enum, Ord, Num, Real, Integral)
 
 -- | A header name.
 newtype HeaderName = HeaderName ByteString deriving (Eq, Show, Read)
