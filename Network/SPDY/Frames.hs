@@ -25,7 +25,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
 
 import Network.SPDY.Flags
-import Network.SPDY.ToWord8
+import Network.SPDY.Internal.ToWord8
 
 -- | The compression dictionary to use for the zlib compression of headers.
 compressionDictionary :: ByteString

@@ -1,4 +1,4 @@
-module Network.SPDY.ToWord8 where
+module Network.SPDY.Internal.ToWord8 where
 
 import Data.Word (Word8)
 

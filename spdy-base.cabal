@@ -26,10 +26,10 @@ Library
   Exposed-modules:     Network.SPDY.Flags,
                        Network.SPDY.Frames,
                        Network.SPDY.Deserialize,
-                       Network.SPDY.Serialize,
-                       Network.SPDY.ToWord8
+                       Network.SPDY.Serialize
   Other-modules:       Network.SPDY.Internal.Deserialize,
-                       Network.SPDY.Internal.Serialize
+                       Network.SPDY.Internal.Serialize,
+                       Network.SPDY.Internal.ToWord8
   Build-depends:       attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,

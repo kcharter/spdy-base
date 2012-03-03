@@ -14,7 +14,7 @@ import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
 
 import Network.SPDY.Frames
-import Network.SPDY.ToWord8
+import Network.SPDY.Internal.ToWord8
 
 rawFrameBuilder :: RawFrame -> Builder
 rawFrameBuilder frame =
