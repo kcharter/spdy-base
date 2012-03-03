@@ -13,8 +13,7 @@ import Codec.Zlib (Deflate, withDeflateInput, flushDeflate)
 import Data.Bits (setBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
+import Data.IORef (newIORef, modifyIORef, readIORef)
 import Data.List (foldl')
 import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
