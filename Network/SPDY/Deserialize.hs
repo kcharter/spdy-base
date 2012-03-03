@@ -4,7 +4,8 @@
 Convert streams of bytes into SPDY frames.
 -}
 module Network.SPDY.Deserialize (rawFrameFromByteString,
-                                 parseRawFrame) where
+                                 parseRawFrame,
+                                 toFrame) where
 
 import Blaze.ByteString.Builder
 import Codec.Zlib (Inflate, withInflateInput, flushInflate)
@@ -74,9 +75,9 @@ netWord16 hi lo = shiftL (fromIntegral hi) 8 .|. fromIntegral lo
 
 -- | Converts a raw frame into the corresponding processed frame,
 -- given a zlib 'Inflate' decompression context.
-toFrame :: Inflate -> RawFrame -> IO Frame
-toFrame inflate raw =
-  either fail return =<< (runErrorT $ runFrameParser $ parseFrame inflate raw)
+toFrame :: Inflate -> RawFrame -> IO (Either String Frame)
+toFrame inflate =
+  runErrorT . runFrameParser . parseFrame inflate
 
 
 parseFrame :: Inflate -> RawFrame -> FrameParser Frame
