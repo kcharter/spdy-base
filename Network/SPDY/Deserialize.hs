@@ -8,18 +8,16 @@ module Network.SPDY.Deserialize (rawFrameFromByteString,
                                  toFrame) where
 
 import Blaze.ByteString.Builder
-import Codec.Zlib (Inflate, withInflateInput, flushInflate)
 import Control.Applicative
 import Control.Monad.Error
 import Data.Attoparsec.ByteString (Parser, anyWord8)
 import qualified Data.Attoparsec.ByteString as AP
 import Data.Bits (testBit, clearBit)
 import Data.ByteString (ByteString)
-import Data.IORef (newIORef, modifyIORef, readIORef)
-import Data.Monoid
 
 import Data.Word
 
+import Network.SPDY.Compression (Inflate, decompress)
 import Network.SPDY.Frames
 import Network.SPDY.Internal.Deserialize
 
@@ -98,16 +96,6 @@ parsePayload :: Parser a -> ByteString -> FrameParser a
 parsePayload p =
   either throwError return . AP.parseOnly p'
     where p' = do r <- p; AP.endOfInput; return r
-
--- TODO: this is almost identical to 'compress' in the 'Serialize' module. Factor out common code.
-decompress :: Inflate -> ByteString -> IO Builder
-decompress inflate bs = do
-  bref <- newIORef mempty
-  let popper = (maybe (return ()) addBS =<<)
-      addBS dbs = modifyIORef bref (`mappend` fromByteString dbs)
-  withInflateInput inflate bs popper
-  flushInflate inflate
-  readIORef bref
 
 newtype FrameParser a =
   FrameParser { runFrameParser :: ErrorT String IO a }

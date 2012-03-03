@@ -1,7 +1,13 @@
-module Network.SPDY.Compression where
+module Network.SPDY.Compression (compressionDictionary,
+                                 Inflate,
+                                 decompress) where
 
+import Blaze.ByteString.Builder
+import Codec.Zlib (Inflate, withInflateInput, flushInflate)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
+import Data.IORef (newIORef, modifyIORef, readIORef)
+import Data.Monoid
 
 -- | The compression dictionary to use for the zlib compression of headers.
 compressionDictionary :: ByteString
@@ -21,3 +27,13 @@ compressionDictionary =
   "ation/xhtmltext/plainpublicmax-agecharset=iso-8859-1utf-8gzipdeflateHTTP/1" ++
   ".1statusversionurl" ++
   "\0"
+
+-- TODO: this is almost identical to 'compress'. Factor out common code.
+decompress :: Inflate -> ByteString -> IO Builder
+decompress inflate bs = do
+  bref <- newIORef mempty
+  let popper = (maybe (return ()) addBS =<<)
+      addBS dbs = modifyIORef bref (`mappend` fromByteString dbs)
+  withInflateInput inflate bs popper
+  flushInflate inflate
+  readIORef bref
