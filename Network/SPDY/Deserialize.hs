@@ -114,9 +114,11 @@ parseControlFrameDetails inflate ctype flags pl
   | otherwise =
       throwError $ "Illegal SPDY frame type '" ++ show ctype ++ "'"
 
+-- | Parse all of the content of a byte string using a given parser.
 parsePayload :: Parser a -> ByteString -> FrameParser a
-parsePayload p bs =
-  either throwError return $ AP.parseOnly p bs
+parsePayload p =
+  either throwError return . AP.parseOnly p'
+    where p' = do r <- p; AP.endOfInput; return r
 
 -- TODO: this is almost identical to 'compress' in the 'Serialize' module. Factor out common code.
 decompress :: Inflate -> ByteString -> IO Builder
