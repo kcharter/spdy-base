@@ -70,7 +70,7 @@ toControlType details =
     RstStream _ _ -> cftRstStream
     Settings _ _ -> cftSettings
     Ping _ -> cftPing
-    GoAway _ _ -> cftPing
+    GoAway _ _ -> cftGoAway
     Headers _ _ _ -> cftHeaders
     WindowUpdate _ _ -> cftWindowUpdate
 
