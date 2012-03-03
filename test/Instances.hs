@@ -5,6 +5,7 @@ import Data.ByteString (ByteString, pack)
 import Data.Word
 import Test.QuickCheck
 
+import Network.SPDY.Flags
 import Network.SPDY.Frames
 
 instance Arbitrary RawFrame where
@@ -31,5 +32,19 @@ instance Arbitrary DataLength where
     DataLength . fromIntegral <$> choose (0, min n 4096 :: Int)
 
 payloadBytes :: DataLength -> Gen ByteString
-payloadBytes dl =
-  pack <$> vectorOf (fromIntegral dl) arbitrary
+payloadBytes = bytes . fromIntegral
+
+bytes :: Int -> Gen ByteString
+bytes n = pack <$> vectorOf n arbitrary
+
+instance Arbitrary ByteString where
+  arbitrary = sized bytes
+
+instance Arbitrary Frame where
+  arbitrary = DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary DataFlags where
+  arbitrary = packFlags <$> arbitrary
+
+instance Arbitrary DataFlag where
+  arbitrary = oneof [return DataFlagFin, return DataFlagCompress]
