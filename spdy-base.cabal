@@ -28,7 +28,7 @@ Library
                        Network.SPDY.Deserialize,
                        Network.SPDY.Serialize,
                        Network.SPDY.ToWord8
-
+  Other-modules:       Network.SPDY.Internal.Deserialize
   Build-depends:       attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
