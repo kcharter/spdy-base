@@ -11,6 +11,7 @@ import Codec.Zlib (Inflate,
                    initInflateWithDictionary,
                    defaultWindowBits)
 
+import Network.SPDY.Compression
 import Network.SPDY.Deserialize
 import Network.SPDY.Frames
 import Network.SPDY.Serialize
