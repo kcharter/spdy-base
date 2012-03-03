@@ -2,7 +2,7 @@
 
 {- |
 
-Serialization of SPDY frames to lazy 'ByteString's.
+Serialization of SPDY frames to 'ByteString's.
 -}
 
 module Network.SPDY.Serialize
