@@ -1,9 +1,12 @@
 module Network.SPDY.Compression (compressionDictionary,
                                  Inflate,
-                                 decompress) where
+                                 decompress,
+                                 Deflate,
+                                 compress) where
 
 import Blaze.ByteString.Builder
-import Codec.Zlib (Inflate, withInflateInput, flushInflate)
+import Codec.Zlib (Inflate, withInflateInput, flushInflate,
+                   Deflate, withDeflateInput, flushDeflate)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
 import Data.IORef (newIORef, modifyIORef, readIORef)
@@ -27,6 +30,18 @@ compressionDictionary =
   "ation/xhtmltext/plainpublicmax-agecharset=iso-8859-1utf-8gzipdeflateHTTP/1" ++
   ".1statusversionurl" ++
   "\0"
+
+compress :: Deflate -> ByteString -> IO Builder
+compress deflate bs = do
+  bref <- newIORef mempty
+  let popper mbsIO = do
+        mbs <- mbsIO
+        maybe addEmpty addBS mbs
+      addEmpty = return ()
+      addBS bs = modifyIORef bref (`mappend` fromByteString bs)
+  withDeflateInput deflate bs popper
+  flushDeflate deflate popper
+  readIORef bref
 
 -- TODO: this is almost identical to 'compress'. Factor out common code.
 decompress :: Inflate -> ByteString -> IO Builder

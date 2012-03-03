@@ -4,15 +4,14 @@ module Network.SPDY.Internal.Serialize where
 
 
 import Blaze.ByteString.Builder
-import Codec.Zlib (Deflate, withDeflateInput, flushDeflate)
 import Data.Bits (setBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.IORef (newIORef, modifyIORef, readIORef)
 import Data.List (foldl')
 import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
 
+import Network.SPDY.Compression (Deflate, compress)
 import Network.SPDY.Frames
 import Network.SPDY.Internal.ToWord8
 
@@ -107,17 +106,6 @@ compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder
 compressHeaderBlock deflate hb =
   compress deflate $ toByteString $ toBuilder hb
 
-compress :: Deflate -> ByteString -> IO Builder
-compress deflate bs = do
-  bref <- newIORef mempty
-  let popper mbsIO = do
-        mbs <- mbsIO
-        maybe addEmpty addBS mbs
-      addEmpty = return ()
-      addBS bs = modifyIORef bref (`mappend` fromByteString bs)
-  withDeflateInput deflate bs popper
-  flushDeflate deflate popper
-  readIORef bref
 
 class ToBuilder a where
   toBuilder :: a -> Builder
