@@ -19,12 +19,16 @@ rawFrameBuilder :: RawFrame -> Builder
 rawFrameBuilder frame =
   rawHeaderBuilder (frameHeader frame) `mappend`
   fromWord8 (flagsByte frame) `mappend`
-  fromWord8 plHi8 `mappend`
-  fromWord16be plLo16 `mappend`
+  toBuilder (payloadLength frame) `mappend`
   fromByteString (payload frame)
-    where pl = fromIntegral $ payloadLength frame :: Word32
-          plHi8 = fromIntegral $ (pl `shiftR` 16) .&. 0xff
-          plLo16 = fromIntegral $ pl .&. 0xffff
+
+instance ToBuilder DataLength where
+  toBuilder (DataLength dl) =
+    fromWord8 dlHi8 `mappend`
+    fromWord16be dlLo16
+      where dlHi8 = fromIntegral $ (dl `shiftR` 16) .&. 0xff
+            dlLo16 = fromIntegral $ dl .&. 0xffff
+
 
 rawHeaderBuilder :: RawFrameHeader -> Builder
 rawHeaderBuilder header =
