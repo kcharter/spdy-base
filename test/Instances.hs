@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Instances where
 
 import Control.Applicative
@@ -37,14 +39,52 @@ payloadBytes = bytes . fromIntegral
 bytes :: Int -> Gen ByteString
 bytes n = pack <$> vectorOf n arbitrary
 
+uptoBytes :: Int -> Gen ByteString
+uptoBytes n = pack <$> resize n (listOf arbitrary)
+
 instance Arbitrary ByteString where
-  arbitrary = sized bytes
+  arbitrary = sized uptoBytes
 
 instance Arbitrary Frame where
-  arbitrary = DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary =
+    oneof [ DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
+          , ControlFrame <$> arbitrary <*> arbitrary ]
+
+-- it's unfortunate to have to repeat the code for every XFlags
+-- instance declaration, but I cannot figure out a way to have a
+-- single instance declaration without resorting to
+-- UndecidableInstances and consequently getting a bunch of
+-- overlapping instance errors
 
 instance Arbitrary DataFlags where
   arbitrary = packFlags <$> arbitrary
 
 instance Arbitrary DataFlag where
   arbitrary = oneof [return DataFlagFin, return DataFlagCompress]
+
+instance Arbitrary ControlFrameDetails where
+  arbitrary = SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary SynStreamFlags where
+  arbitrary = packFlags <$> arbitrary
+
+instance Arbitrary SynStreamFlag where
+  arbitrary = oneof $ map return [ SynStreamFlagFin
+                                 , SynStreamFlagUnidirectional ]
+
+instance Arbitrary Priority where
+  arbitrary = Priority . fromIntegral <$> choose (0,7 :: Int)
+
+instance Arbitrary HeaderBlock where
+  arbitrary = do
+    pairs <- listOf arbitrary
+    return $ HeaderBlock (fromIntegral $ length pairs) pairs
+
+instance Arbitrary HeaderName where
+  arbitrary = HeaderName <$> shortBytes
+
+instance Arbitrary HeaderValue where
+  arbitrary = HeaderValue <$> shortBytes
+
+shortBytes :: Gen ByteString
+shortBytes = resize 32 arbitrary
