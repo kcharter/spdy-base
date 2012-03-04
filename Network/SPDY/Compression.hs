@@ -32,23 +32,26 @@ compressionDictionary =
   "\0"
 
 compress :: Deflate -> ByteString -> IO Builder
-compress deflate bs = do
-  bref <- newIORef mempty
-  let popper mbsIO = do
-        mbs <- mbsIO
-        maybe addEmpty addBS mbs
-      addEmpty = return ()
-      addBS bs = modifyIORef bref (`mappend` fromByteString bs)
-  withDeflateInput deflate bs popper
-  flushDeflate deflate popper
-  readIORef bref
+compress deflate bs =
+  transform deflate withDeflateInput flushDeflate bs
 
--- TODO: this is almost identical to 'compress'. Factor out common code.
 decompress :: Inflate -> ByteString -> IO Builder
-decompress inflate bs = do
+decompress inflate bs =
+  transform inflate withInflateInput flushInflate' bs
+  where flushInflate' c popper =
+          popper $ fmap Just $ flushInflate c
+
+type Popper a = IO (Maybe ByteString) -> IO a
+
+transform :: context
+             -> (context -> ByteString -> Popper () -> IO ())
+             -> (context -> Popper () -> IO ())
+             -> ByteString
+             -> IO Builder
+transform context feed finish bs = do
   bref <- newIORef mempty
   let popper = (maybe (return ()) addBS =<<)
       addBS dbs = modifyIORef bref (`mappend` fromByteString dbs)
-  withInflateInput inflate bs popper
-  flushInflate inflate
+  feed context bs popper
+  finish context popper
   readIORef bref
