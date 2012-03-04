@@ -82,6 +82,12 @@ instance Arbitrary HeaderBlock where
     pairs <- listOf arbitrary
     return $ HeaderBlock (fromIntegral $ length pairs) pairs
 
+-- although we don't need this instance for the instance for
+-- HeaderBlock, this allows a stand-alone test of the builder and
+-- attoparsec parser.
+instance Arbitrary HeaderCount where
+  arbitrary = HeaderCount <$> (fromIntegral <$> choose (0, 1024 :: Int))
+
 instance Arbitrary HeaderName where
   arbitrary = HeaderName <$> shortBytes
 
