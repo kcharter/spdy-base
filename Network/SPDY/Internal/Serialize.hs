@@ -87,7 +87,7 @@ toControlPayloadBuilder deflate details =
             toBuilder sid `mappend`
             toBuilder pri `mappend`) $ compressHeaderBlock deflate hb
     SynReply _ sid hb ->
-      error "ni"
+      fmap (toBuilder sid `mappend`) $ compressHeaderBlock deflate hb
     RstStream sid status ->
       error "ni"
     Settings _ pairs ->

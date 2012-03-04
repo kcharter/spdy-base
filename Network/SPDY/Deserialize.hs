@@ -74,8 +74,11 @@ parseControlFrameDetails inflate ctype flags pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
       return $ SynStream (SynStreamFlags flags) sid asid pri headerBlock
-  | ctype == cftSynReply =
-      error "ni"
+  | ctype == cftSynReply = do
+      (sid, compressedHeaders) <- parsePayload parseSynReplyContent pl
+      headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
+      headerBlock <- parsePayload parseHeaderBlock headerBytes
+      return $ SynReply (SynReplyFlags flags) sid headerBlock
   | ctype == cftRstStream =
       error "ni"
   | ctype == cftSettings =

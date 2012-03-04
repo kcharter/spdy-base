@@ -41,6 +41,12 @@ parseSynStreamContent = do
   headerBytes <- parseRest
   return (sid, asid, pri, headerBytes)
 
+parseSynReplyContent :: Parser (StreamID, ByteString)
+parseSynReplyContent = do
+  sid <- parseStreamID
+  headerBytes <- parseRest
+  return (sid, headerBytes)
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 
