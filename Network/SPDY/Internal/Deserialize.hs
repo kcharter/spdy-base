@@ -4,11 +4,23 @@ import Control.Applicative
 import Control.Monad (replicateM)
 import Data.Attoparsec.ByteString (Parser, anyWord8)
 import qualified Data.Attoparsec.ByteString as AP
-import Data.Bits (shiftR, shiftL, (.|.))
+import Data.Bits (shiftR, shiftL, testBit, clearBit, (.|.))
 import Data.ByteString (ByteString)
 import Data.Word
 
 import Network.SPDY.Frames
+
+parseFrameHeader :: Parser RawFrameHeader
+parseFrameHeader = fromBytes <$> anyWord8 <*> anyWord8 <*> anyWord8 <*> anyWord8
+  where fromBytes b1 b2 b3 b4 =
+          if testBit b1 controlBit
+          then
+            ControlFrameHeader
+            (SPDYVersion $ netWord16 (clearBit b1 controlBit) b2)
+            (netWord16 b3 b4)
+          else
+            DataFrameHeader $ StreamID $ netWord32 b1 b2 b3 b4
+        controlBit = 7
 
 parseDataLength :: Parser DataLength
 parseDataLength = fmap DataLength anyWord24

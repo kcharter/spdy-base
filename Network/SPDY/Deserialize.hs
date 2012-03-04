@@ -12,7 +12,6 @@ import Control.Applicative
 import Control.Monad.Error
 import Data.Attoparsec.ByteString (Parser, anyWord8)
 import qualified Data.Attoparsec.ByteString as AP
-import Data.Bits (testBit, clearBit)
 import Data.ByteString (ByteString)
 
 import Data.Word
@@ -37,17 +36,6 @@ parseRawFrame = do
   payload <- AP.take $ fromIntegral payloadLength
   return $ RawFrame header flags payload
 
-parseFrameHeader :: Parser RawFrameHeader
-parseFrameHeader = fromBytes <$> anyWord8 <*> anyWord8 <*> anyWord8 <*> anyWord8
-  where fromBytes b1 b2 b3 b4 =
-          if testBit b1 controlBit
-          then
-            ControlFrameHeader
-            (SPDYVersion $ netWord16 (clearBit b1 controlBit) b2)
-            (netWord16 b3 b4)
-          else
-            DataFrameHeader $ StreamID $ netWord32 b1 b2 b3 b4
-        controlBit = 7
 
 -- | Converts a raw frame into the corresponding processed frame,
 -- given a zlib 'Inflate' decompression context.
