@@ -58,10 +58,10 @@ parseControlFrameDetails :: Inflate -> Word16 -> Word8 -> ByteString
                             -> FrameParser ControlFrameDetails
 parseControlFrameDetails inflate ctype flags pl
   | ctype == cftSynStream = do
-      (sid, asid, pri, compressedHeaders) <- parsePayload parseSynStreamContent pl
+      (sid, asid, pri, slot, compressedHeaders) <- parsePayload parseSynStreamContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
-      return $ SynStream (SynStreamFlags flags) sid asid pri headerBlock
+      return $ SynStream (SynStreamFlags flags) sid asid pri slot headerBlock
   | ctype == cftSynReply = do
       (sid, compressedHeaders) <- parsePayload parseSynReplyContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)

@@ -50,7 +50,7 @@ toRawFrameHeader frame =
 toControlType :: ControlFrameDetails -> Word16
 toControlType details =
   case details of
-    SynStream _ _ _ _ _ -> cftSynStream
+    SynStream _ _ _ _ _ _ -> cftSynStream
     SynReply _ _ _ -> cftSynReply
     RstStream _ _ -> cftRstStream
     Settings _ _ -> cftSettings
@@ -64,7 +64,7 @@ toFlagsByte frame =
   case frame of
     ControlFrame _ d ->
       case d of
-        SynStream f _ _ _ _ -> toWord8 f
+        SynStream f _ _ _ _ _ -> toWord8 f
         SynReply f _ _ -> toWord8 f
         Settings f _ -> toWord8 f
         Headers f _ _ -> toWord8 f
@@ -86,10 +86,11 @@ toControlPayload deflate = fmap toByteString . toControlPayloadBuilder deflate
 toControlPayloadBuilder :: Deflate -> ControlFrameDetails -> IO Builder
 toControlPayloadBuilder deflate details =
   case details of
-    SynStream _ id sid pri hb ->
+    SynStream _ id sid pri slot hb ->
       fmap (toBuilder id `mappend`
             toBuilder sid `mappend`
-            toBuilder pri `mappend`) $ compressHeaderBlock deflate hb
+            toBuilder pri `mappend`
+            toBuilder slot `mappend`) $ compressHeaderBlock deflate hb
     SynReply _ sid hb ->
       fmap (toBuilder sid `mappend`) $ compressHeaderBlock deflate hb
     RstStream sid status ->
@@ -122,6 +123,9 @@ instance ToBuilder (Maybe StreamID) where
 
 instance ToBuilder Priority where
   toBuilder (Priority w) = fromWord8 (w `shiftL` 5)
+
+instance ToBuilder Slot where
+  toBuilder (Slot w) = fromWord8 w
 
 instance ToBuilder HeaderBlock where
   toBuilder hb =

@@ -64,7 +64,7 @@ instance Arbitrary DataFlag where
 
 instance Arbitrary ControlFrameDetails where
   arbitrary =
-    oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+    oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
           , SynReply <$> arbitrary <*> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlags where
@@ -76,6 +76,9 @@ instance Arbitrary SynStreamFlag where
 
 instance Arbitrary Priority where
   arbitrary = Priority . fromIntegral <$> choose (0,7 :: Int)
+
+instance Arbitrary Slot where
+  arbitrary = Slot . fromIntegral <$> choose (0, 255 :: Int)
 
 instance Arbitrary HeaderBlock where
   arbitrary = do

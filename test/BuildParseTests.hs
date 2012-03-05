@@ -22,7 +22,8 @@ test = testGroup "Build-parse tests"
        , testProperty "HeaderCount" prop_buildParseHeaderCount
        , testProperty "HeaderName" prop_buildParseHeaderName
        , testProperty "HeaderValue" prop_buildParseHeaderValue
-       , testProperty "Priority" prop_buildParsePriority]
+       , testProperty "Priority" prop_buildParsePriority
+       , testProperty "Slot" prop_buildParseSlot]
 
 prop_buildParseRawFrameHeader :: RawFrameHeader -> Bool
 prop_buildParseRawFrameHeader = prop_buildParse rawHeaderBuilder parseFrameHeader
@@ -35,6 +36,9 @@ prop_buildParseStreamID = prop_buildParse toBuilder parseStreamID
 
 prop_buildParsePriority :: Priority -> Bool
 prop_buildParsePriority = prop_buildParse toBuilder parsePriority
+
+prop_buildParseSlot :: Slot -> Bool
+prop_buildParseSlot = prop_buildParse toBuilder parseSlot
 
 prop_buildParseHeaderCount :: HeaderCount -> Bool
 prop_buildParseHeaderCount = prop_buildParse toBuilder parseHeaderCount

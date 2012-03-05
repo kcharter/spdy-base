@@ -123,6 +123,11 @@ data ControlFrameDetails =
     -- 'Nothing'.
   , priority :: Priority
     -- ^ The priority of the new stream.
+  , slot :: Slot
+    -- ^ The index in the server's credential vector of the client
+    -- certificate to be used for this request. A value of zero means
+    -- that no client certificate should be associated with this
+    -- stream.
   , headerBlock :: HeaderBlock
     -- ^ A set of headers for the stream.
   } |
@@ -299,6 +304,10 @@ newtype Priority = Priority Word8 deriving (Eq, Show, Read)
 
 instance Ord Priority where
   compare (Priority p1) (Priority p2) =  compare p2 p1
+
+-- | A position in a server's credential vector. Zero means no position.
+newtype Slot = Slot Word8 deriving (Eq, Show, Read)
+
 
 -- | A list of header names and their corresponding values.
 data HeaderBlock =

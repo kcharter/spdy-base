@@ -45,13 +45,14 @@ netWord16 :: Word8 -> Word8 -> Word16
 netWord16 hi lo = shiftL (fromIntegral hi) 8 .|. fromIntegral lo
 
 
-parseSynStreamContent :: Parser (StreamID, Maybe StreamID, Priority, ByteString)
+parseSynStreamContent :: Parser (StreamID, Maybe StreamID, Priority, Slot, ByteString)
 parseSynStreamContent = do
   sid <- parseStreamID
   asid <- parseMaybeStreamID
   pri <- parsePriority
+  slot <- parseSlot
   headerBytes <- parseRest
-  return (sid, asid, pri, headerBytes)
+  return (sid, asid, pri, slot, headerBytes)
 
 parseSynReplyContent :: Parser (StreamID, ByteString)
 parseSynReplyContent = do
@@ -69,6 +70,9 @@ parseMaybeStreamID = nothingIfZero <$> anyWord32
 
 parsePriority :: Parser Priority
 parsePriority = (Priority . (`shiftR` 5)) <$> anyWord8
+
+parseSlot :: Parser Slot
+parseSlot = Slot <$> anyWord8
 
 parseHeaderBlock :: Parser HeaderBlock
 parseHeaderBlock = do
