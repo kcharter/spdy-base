@@ -9,7 +9,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List (foldl')
 import Data.Monoid
-import Data.Word (Word8, Word16, Word32)
+import Data.Word (Word8, Word16)
 
 import Network.SPDY.Compression (Deflate, compress)
 import Network.SPDY.Frames
