@@ -449,6 +449,8 @@ data SettingID =
   -- bytes transmitted).
   SettingsInitialWindowSize |
   -- ^ The sender's initial window size, in bytes, for new streams.
+  SettingsClientCertificateVectorSize |
+  -- ^ The server's new credential vector size.
   SettingsOther Word32
   -- ^ A catch-all for other settings values that this code doesn't
   -- recognize. This is *not* part of the SPDY specification.
