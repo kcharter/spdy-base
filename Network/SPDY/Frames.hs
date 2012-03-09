@@ -3,16 +3,15 @@
 
 {- |
 
-Data types for representing SPDY frames.
+Data types for representing SPDY 3 frames.
 
-The definitions here are derived from the SPDY draft specification
-published online at
+The definitions here are derived from the SPDY 3 draft specification
+accessible from
 
-<http://mbelshe.github.com/SPDY-Specification/draft-mbelshe-spdy-00.xml>
+<http://dev.chromium.org/spdy/spdy-protocol>
 
 Many of the descriptive comments in this module are taken almost
-word-for-word from the draft spec. This particular version uses the
-draft that expires in November 2011.
+word-for-word from the draft spec.
 
 -}
 
