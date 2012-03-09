@@ -84,6 +84,9 @@ cftHeaders = 0x8
 cftWindowUpdate :: Word16
 cftWindowUpdate = 0x9
 
+cftCredential :: Word16
+cftCredential = 0xB
+
 -- | The more heavily-processed form of a SPDY frame. For control
 -- frames, the data payload is replaced by a data type representing
 -- the contents of the payload.
@@ -196,6 +199,17 @@ data ControlFrameDetails =
   , windowUpdateDeltaWindowSize :: DeltaWindowSize
     -- ^ The additional number of bytes that the sender can transmit
     -- in addition to the remaining window size.
+  } |
+  -- | Asks the server to update a slot in its credential vector for
+  -- this connection. The server will overwrite any existing
+  -- credential at that slot.
+  Credential
+  { credentialSlot :: Slot16
+    -- ^ The slot in the server's credential vector in which to place the certificate.
+  , credentialProof :: Proof
+    -- ^ Cryptographic proof that the client has the necessary private key.
+  , credentialCertificates :: [Certificate]
+    -- ^ The certificate chain, starting with the leaf certificate.
   }
   deriving (Eq, Show, Read)
 
@@ -305,9 +319,17 @@ newtype Priority = Priority Word8 deriving (Eq, Show, Read)
 instance Ord Priority where
   compare (Priority p1) (Priority p2) =  compare p2 p1
 
--- | A position in a server's credential vector. Zero means no position.
+-- | A position in a server's credential vector. Zero means no
+-- position. This is used only in a @SYN_STREAM@ frame.
 newtype Slot = Slot Word8 deriving (Eq, Show, Read)
 
+-- | Yet another position in a server's credential vector, but for use
+-- in a @CREDENTIAL@ frame. Yes, in the draft of SPDY 3, the slot
+-- fields really are different sizes in the two frames. In effect,
+-- this means that there are at most 255 credentials in the server's
+-- credential vector. However, I've declared both types just to be
+-- faithful to the spec.
+newtype Slot16 = Slot16 Word16 deriving (Eq, Show, Read)
 
 -- | A list of header names and their corresponding values.
 data HeaderBlock =
@@ -456,3 +478,11 @@ instance Flag HeadersFlag HeadersFlags where
 -- | The number of bytes now free in the sender's data transfer
 -- window.
 newtype DeltaWindowSize = DeltaWindowSize Word32 deriving (Eq, Show, Read)
+
+-- | A cryptographic proof that the client has the necessary private
+-- key. The format is a TLS digitally-signed element. See the spec for
+-- details and references to the relevant RFCs.
+newtype Proof = Proof ByteString deriving (Eq, Show, Read)
+
+-- | A DER-encoded client certificate.
+newtype Certificate = Certificate ByteString deriving (Eq, Show, Read)

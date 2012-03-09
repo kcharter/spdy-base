@@ -79,6 +79,8 @@ parseControlFrameDetails inflate ctype flags pl
       error "ni"
   | ctype == cftWindowUpdate =
       error "ni"
+  | ctype == cftCredential =
+      error "ni"
   | otherwise =
       throwError $ "Illegal SPDY frame type '" ++ show ctype ++ "'"
 

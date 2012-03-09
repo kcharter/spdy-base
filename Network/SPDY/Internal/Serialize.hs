@@ -58,6 +58,7 @@ toControlType details =
     GoAway _ _ -> cftGoAway
     Headers _ _ _ -> cftHeaders
     WindowUpdate _ _ -> cftWindowUpdate
+    Credential _ _ _ -> cftCredential
 
 toFlagsByte :: Frame -> Word8
 toFlagsByte frame =
@@ -105,7 +106,8 @@ toControlPayloadBuilder deflate details =
       error "ni"
     WindowUpdate sid dws ->
       error "ni"
-
+    Credential slot proof certs ->
+      error "ni"
 
 compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder
 compressHeaderBlock deflate hb =
