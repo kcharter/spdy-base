@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Instances where
 
 import Control.Applicative
@@ -50,13 +48,7 @@ instance Arbitrary Frame where
     oneof [ DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
           , ControlFrame <$> arbitrary <*> arbitrary ]
 
--- it's unfortunate to have to repeat the code for every XFlags
--- instance declaration, but I cannot figure out a way to have a
--- single instance declaration without resorting to
--- UndecidableInstances and consequently getting a bunch of
--- overlapping instance errors
-
-instance Arbitrary DataFlags where
+instance (Flag f, Arbitrary f) => Arbitrary (Flags f) where
   arbitrary = packFlags <$> arbitrary
 
 instance Arbitrary DataFlag where
@@ -66,9 +58,6 @@ instance Arbitrary ControlFrameDetails where
   arbitrary =
     oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
           , SynReply <$> arbitrary <*> arbitrary <*> arbitrary ]
-
-instance Arbitrary SynStreamFlags where
-  arbitrary = packFlags <$> arbitrary
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -99,10 +88,6 @@ instance Arbitrary HeaderValue where
 
 shortBytes :: Gen ByteString
 shortBytes = resize 32 arbitrary
-
-
-instance Arbitrary SynReplyFlags where
-  arbitrary = packFlags <$> arbitrary
 
 instance Arbitrary SynReplyFlag where
   arbitrary = return SynReplyFlagFin

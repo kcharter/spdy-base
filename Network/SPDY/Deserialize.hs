@@ -17,6 +17,7 @@ import Data.ByteString (ByteString)
 import Data.Word
 
 import Network.SPDY.Compression (Inflate, decompress)
+import Network.SPDY.Flags
 import Network.SPDY.Frames
 import Network.SPDY.Internal.Deserialize
 
@@ -50,7 +51,7 @@ parseFrame inflate rawFrame =
     ControlFrameHeader v ctype ->
       fmap (ControlFrame v) $ parseControlFrameDetails inflate ctype flags pl
     DataFrameHeader sid ->
-      return $ DataFrame sid (DataFlags flags) pl
+      return $ DataFrame sid (Flags flags) pl
     where flags = flagsByte rawFrame
           pl = payload rawFrame
 
@@ -61,12 +62,12 @@ parseControlFrameDetails inflate ctype flags pl
       (sid, asid, pri, slot, compressedHeaders) <- parsePayload parseSynStreamContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
-      return $ SynStream (SynStreamFlags flags) sid asid pri slot headerBlock
+      return $ SynStream (Flags flags) sid asid pri slot headerBlock
   | ctype == cftSynReply = do
       (sid, compressedHeaders) <- parsePayload parseSynReplyContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
-      return $ SynReply (SynReplyFlags flags) sid headerBlock
+      return $ SynReply (Flags flags) sid headerBlock
   | ctype == cftRstStream =
       error "ni"
   | ctype == cftSettings =

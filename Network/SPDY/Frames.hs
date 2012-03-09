@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 {- |
 
@@ -18,13 +17,11 @@ word-for-word from the draft spec.
 
 module Network.SPDY.Frames where
 
-import Data.Bits (Bits)
 import Data.Word
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
 
 import Network.SPDY.Flags
-import Network.SPDY.Internal.ToWord8
 
 
 -- | A lightly-processed SPDY frame. This is intended as an
@@ -103,7 +100,7 @@ data Frame =
   DataFrame
   { streamID :: StreamID
     -- ^ Identifies the stream to which the accompanying data belongs.
-  , dataFlags :: DataFlags
+  , dataFlags :: Flags DataFlag
     -- ^ Flags for the data frame.
   , dataBytes :: ByteString
     -- ^ The raw data.
@@ -115,7 +112,7 @@ data Frame =
 data ControlFrameDetails =
   -- | Request to create a new stream.
   SynStream
-  { synStreamFlags :: SynStreamFlags
+  { synStreamFlags :: Flags SynStreamFlag
     -- ^ Flags for stream creation.
   , newStreamID :: StreamID
     -- ^ Uniquely identifies the new stream.
@@ -135,7 +132,7 @@ data ControlFrameDetails =
   } |
   -- | Acknowledges receipt of a 'SynStream' frame.
   SynReply
-  { synReplyFlags :: SynReplyFlags
+  { synReplyFlags :: Flags SynReplyFlag
     -- ^ Flags for the reply.
   , newStreamID :: StreamID
     -- ^ The same stream ID as in the 'SynStream' frame.
@@ -154,7 +151,7 @@ data ControlFrameDetails =
   -- | Exchange settings, and request or acknowledge that they have
   -- been persisted or cleared.
   Settings
-  { settingsFlags :: SettingsFlags
+  { settingsFlags :: Flags SettingsFlag
   , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
   } |
   -- | Used for estimating the minimum round-trip time from the
@@ -181,7 +178,7 @@ data ControlFrameDetails =
   } |
   -- | Augments an existing stream with additional headers.
   Headers
-  { headersFlags :: HeadersFlags
+  { headersFlags :: Flags HeadersFlag
   , headersStreamID :: StreamID
     -- ^ The stream ID of the stream to which the headers apply.
   , headerBlock :: HeaderBlock
@@ -212,11 +209,6 @@ data ControlFrameDetails =
   }
   deriving (Eq, Show, Read)
 
-newtype DataFlags = DataFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 DataFlags where
-  toWord8 (DataFlags w) = w
-
 data DataFlag =
   DataFlagFin |
   -- ^ The enclosing frame is the last one transmitted by the sender
@@ -225,14 +217,9 @@ data DataFlag =
   -- ^ The data in the enclosing frame has been compressed.
   deriving (Eq, Show, Read)
 
-instance Flag DataFlag DataFlags where
+instance Flag DataFlag where
   bit DataFlagFin = 0
   bit DataFlagCompress = 1
-
-newtype SynStreamFlags = SynStreamFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 SynStreamFlags where
-  toWord8 (SynStreamFlags w) = w
 
 -- | Flags used in the 'SynStream' frame.
 data SynStreamFlag =
@@ -243,14 +230,9 @@ data SynStreamFlag =
   -- ^ The recipient should start in the half-closed state.
   deriving (Eq, Show, Read)
 
-instance Flag SynStreamFlag SynStreamFlags where
+instance Flag SynStreamFlag where
   bit SynStreamFlagFin = 0
   bit SynStreamFlagUnidirectional = 1
-
-newtype SynReplyFlags = SynReplyFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 SynReplyFlags where
-  toWord8 (SynReplyFlags w) = w
 
 -- | Flags used in the 'SynReply' frame.
 data SynReplyFlag =
@@ -259,7 +241,7 @@ data SynReplyFlag =
   -- stream and the sender is in the half-closed state.
   deriving (Eq, Show, Read)
 
-instance Flag SynReplyFlag SynReplyFlags where
+instance Flag SynReplyFlag where
   bit SynReplyFlagFin = 0
 
 -- | The various reasons why a stream could be terminated abnormally
@@ -368,17 +350,12 @@ newtype HeaderValue = HeaderValue ByteString deriving (Eq, Show, Read)
 -- | A settings ID paired with a list of settings flags.
 data SettingIDAndFlags =
   SettingIDAndFlags
-  { settingIDFlags :: SettingIDFlags
+  { settingIDFlags :: Flags SettingIDFlag
     -- ^ The flags.
   , settingID :: SettingID
     -- ^ The setting ID itself.
   }
   deriving (Eq, Show, Read)
-
-newtype SettingsFlags = SettingsFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 SettingsFlags where
-  toWord8 (SettingsFlags w) = w
 
 -- | Flags for a 'Settings' control frame.
 data SettingsFlag =
@@ -392,13 +369,8 @@ data SettingsFlag =
   -- the server.
   deriving (Eq, Show, Read)
 
-instance Flag SettingsFlag SettingsFlags where
+instance Flag SettingsFlag where
   bit SettingsFlagClearSettings = 0
-
-newtype SettingIDFlags = SettingIDFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 SettingIDFlags where
-  toWord8 (SettingIDFlags w) = w
 
 -- | Flags that appear as part of a 'SettingID'.
 data SettingIDFlag =
@@ -416,7 +388,7 @@ data SettingIDFlag =
   -- flag is sent only by the client.
   deriving (Eq, Show, Read)
 
-instance Flag SettingIDFlag SettingIDFlags where
+instance Flag SettingIDFlag where
   bit SettingIDFlagPersistValue = 0
   bit SettingIDFlagPersisted = 1
 
@@ -479,11 +451,6 @@ data GoAwayStatus =
   -- ^ Unrecognized by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
 
-newtype HeadersFlags = HeadersFlags Word8 deriving (Eq, Read, Show, Num, Bits, Flags)
-
-instance ToWord8 HeadersFlags where
-  toWord8 (HeadersFlags w) = w
-
 -- | Flags used in a 'Headers' control frame.
 data HeadersFlag =
   HeadersFlagFin
@@ -491,7 +458,7 @@ data HeadersFlag =
   -- this stream, and the sender is now in the half-closed state.
   deriving (Eq, Show, Read)
 
-instance Flag HeadersFlag HeadersFlags where
+instance Flag HeadersFlag where
   bit HeadersFlagFin = 0
 
 -- | The number of bytes now free in the sender's data transfer
