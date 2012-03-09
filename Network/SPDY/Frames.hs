@@ -279,14 +279,27 @@ data TerminationStatus =
   Cancel |
   -- ^ Used by the creator of a stream to indicate that the stream is
   -- no longer needed.
+  InternalError |
+  -- ^ A generic error that can be used when the implementation has
+  -- internally failed, not due to anything in the protocol.
   FlowControlError |
   -- ^ The endpoint detected that its peer violated the flow control
   -- protocol.
   StreamInUse |
-  -- ^ The endpoint received a 'SynReply' for a stream already open.
+  -- ^ The endpoint received a @SYN_REPLY@ for a stream already open.
   StreamAlreadyClosed |
-  -- ^ The endpoint received a data or 'SynReply' frame for a stream
-  -- which is half-closed.
+  -- ^ The endpoint received a data or @SYN_REPLY@ frame for a stream
+  -- which is half-closed. |
+  InvalidCredentials |
+  -- ^ The server received a request for a resource whose origin does
+  -- not have valid credentials in the client certificate vector.
+  FrameTooLarge |
+  -- ^ The endpoint received a frame which this implementation could
+  -- not support. If FRAME_TOO_LARGE is sent for a @SYN_STREAM@,
+  -- @HEADERS@, or @SYN_REPLY@ frame without fully processing the
+  -- compressed portion of those frames, then the compression state
+  -- will be out-of-sync with the other endpoint. In this case,
+  -- senders of @FRAME_TOO_LARGE@ must close the session.
   TerminationStatusUnknown Word32
   -- ^ Some other termination status, unrecognized by this
   -- library. This is *not* part of the SPDY spec.
