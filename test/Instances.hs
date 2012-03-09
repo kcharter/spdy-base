@@ -83,7 +83,7 @@ instance Arbitrary Slot where
 instance Arbitrary HeaderBlock where
   arbitrary = do
     pairs <- listOf arbitrary
-    return $ HeaderBlock (fromIntegral $ length pairs) pairs
+    return $ HeaderBlock pairs
 
 -- although we don't need this instance for the instance for
 -- HeaderBlock, this allows a stand-alone test of the builder and

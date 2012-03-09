@@ -78,7 +78,7 @@ parseHeaderBlock :: Parser HeaderBlock
 parseHeaderBlock = do
   hc <- parseHeaderCount
   headerPairs <- replicateM (fromIntegral hc) parsePair
-  return $ HeaderBlock hc headerPairs
+  return $ HeaderBlock headerPairs
   where parsePair = (,) <$> parseHeaderName <*> parseHeaderValue
 
 parseHeaderCount :: Parser HeaderCount

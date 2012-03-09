@@ -344,14 +344,16 @@ newtype Slot = Slot Word8 deriving (Eq, Show, Read)
 newtype Slot16 = Slot16 Word16 deriving (Eq, Show, Read)
 
 -- | A list of header names and their corresponding values.
-data HeaderBlock =
+newtype HeaderBlock =
   HeaderBlock
-  { headerCount :: HeaderCount
-    -- ^ Number of headers in the block.
-  , headerPairs :: [(HeaderName, HeaderValue)]
+  { headerPairs :: [(HeaderName, HeaderValue)]
     -- ^ The headers and their values.
   }
   deriving (Eq, Show, Read)
+
+-- | The number of headers in a block.
+headerCount :: HeaderBlock -> HeaderCount
+headerCount = fromIntegral . length . headerPairs
 
 -- | The number of headers (name-value pairs) in a header block.
 newtype HeaderCount =
