@@ -471,6 +471,9 @@ data GoAwayStatus =
   -- ^ This is a normal session tear-down.
   GoAwayProtocolError |
   -- ^ A generic error, used only if no more specific error applies.
+  GoAwayInternalError |
+  -- ^ A generic error which can be used when the implementation has
+  -- internally failed, not due to anything in the protocol.
   GoAwayStatusUnknown Word32
   -- ^ Unrecognized by this library (not part of the SPDY spec).
   deriving (Eq, Show, Read)
