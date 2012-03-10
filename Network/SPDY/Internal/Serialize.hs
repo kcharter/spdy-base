@@ -95,7 +95,7 @@ toControlPayloadBuilder deflate details =
     SynReply _ sid hb ->
       fmap (toBuilder sid `mappend`) $ compressHeaderBlock deflate hb
     RstStream sid status ->
-      error "ni"
+      return $ toBuilder sid `mappend` toBuilder status
     Settings _ pairs ->
       error "ni"
     Ping pid ->
@@ -155,3 +155,18 @@ instance ToBuilder PingID where
 
 instance ToBuilder DeltaWindowSize where
   toBuilder (DeltaWindowSize w) = fromWord32be w
+
+instance ToBuilder TerminationStatus where
+  toBuilder ts = fromWord32be $ case ts of
+    ProtocolError -> tsProtocolError
+    InvalidStream -> tsInvalidStream
+    RefusedStream -> tsRefusedStream
+    UnsupportedVersion -> tsUnsupportedVersion
+    Cancel -> tsCancel
+    InternalError -> tsInternalError
+    FlowControlError -> tsFlowControlError
+    StreamInUse -> tsStreamInUse
+    StreamAlreadyClosed -> tsStreamAlreadyClosed
+    InvalidCredentials -> tsInvalidCredentials
+    FrameTooLarge -> tsFrameTooLarge
+    TerminationStatusUnknown w -> w

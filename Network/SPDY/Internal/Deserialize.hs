@@ -60,6 +60,9 @@ parseSynReplyContent = do
   headerBytes <- parseRest
   return (sid, headerBytes)
 
+parseRstStreamContent :: Parser (StreamID, TerminationStatus)
+parseRstStreamContent = (,) <$> parseStreamID <*> parseTerminationStatus
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 
@@ -94,6 +97,22 @@ parseLengthAndBytes :: Parser ByteString
 parseLengthAndBytes = do
   len <- fmap fromIntegral $ anyWord32
   AP.take len
+
+parseTerminationStatus :: Parser TerminationStatus
+parseTerminationStatus =
+  fmap toStatus anyWord32
+    where toStatus w | w == tsProtocolError = ProtocolError
+                     | w == tsInvalidStream = InvalidStream
+                     | w == tsRefusedStream = RefusedStream
+                     | w == tsUnsupportedVersion = UnsupportedVersion
+                     | w == tsCancel = Cancel
+                     | w == tsInternalError = InternalError
+                     | w == tsFlowControlError = FlowControlError
+                     | w == tsStreamInUse = StreamInUse
+                     | w == tsStreamAlreadyClosed = StreamAlreadyClosed
+                     | w == tsInvalidCredentials = InvalidCredentials
+                     | w == tsFrameTooLarge = FrameTooLarge
+                     | otherwise = TerminationStatusUnknown w
 
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString

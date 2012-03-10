@@ -69,7 +69,7 @@ parseControlFrameDetails inflate ctype flags pl
       headerBlock <- parsePayload parseHeaderBlock headerBytes
       return $ SynReply (Flags flags) sid headerBlock
   | ctype == cftRstStream =
-      error "ni"
+      fmap (uncurry RstStream) $ parsePayload parseRstStreamContent pl
   | ctype == cftSettings =
       error "ni"
   | ctype == cftPing =

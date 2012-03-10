@@ -57,7 +57,8 @@ instance Arbitrary DataFlag where
 instance Arbitrary ControlFrameDetails where
   arbitrary =
     oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-          , SynReply <$> arbitrary <*> arbitrary <*> arbitrary ]
+          , SynReply <$> arbitrary <*> arbitrary <*> arbitrary
+          , RstStream <$> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -91,3 +92,19 @@ shortBytes = resize 32 arbitrary
 
 instance Arbitrary SynReplyFlag where
   arbitrary = return SynReplyFlagFin
+
+instance Arbitrary TerminationStatus where
+  arbitrary =
+    frequency [ (length fixedValues, elements fixedValues)
+              , (1, fmap (TerminationStatusUnknown . fromIntegral) $ choose (12, 1024 :: Int)) ]
+      where fixedValues = [ ProtocolError,
+                            InvalidStream,
+                            RefusedStream,
+                            UnsupportedVersion,
+                            Cancel,
+                            InternalError,
+                            FlowControlError,
+                            StreamInUse,
+                            StreamAlreadyClosed,
+                            InvalidCredentials,
+                            FrameTooLarge ]

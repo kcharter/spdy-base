@@ -244,6 +244,39 @@ data SynReplyFlag =
 instance Flag SynReplyFlag where
   bit SynReplyFlagFin = 0
 
+tsProtocolError :: Word32
+tsProtocolError = 1
+
+tsInvalidStream :: Word32
+tsInvalidStream = 2
+
+tsRefusedStream :: Word32
+tsRefusedStream = 3
+
+tsUnsupportedVersion :: Word32
+tsUnsupportedVersion = 4
+
+tsCancel :: Word32
+tsCancel = 5
+
+tsInternalError :: Word32
+tsInternalError =  6
+
+tsFlowControlError :: Word32
+tsFlowControlError = 7
+
+tsStreamInUse :: Word32
+tsStreamInUse = 8
+
+tsStreamAlreadyClosed :: Word32
+tsStreamAlreadyClosed = 9
+
+tsInvalidCredentials :: Word32
+tsInvalidCredentials = 10
+
+tsFrameTooLarge :: Word32
+tsFrameTooLarge = 11
+
 -- | The various reasons why a stream could be terminated abnormally
 -- with a 'RstStream' frame.
 data TerminationStatus =
