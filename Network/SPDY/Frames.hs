@@ -450,7 +450,7 @@ data SettingID =
   -- recommended that this value be no smaller than 100.
   SettingsCurrentCWND |
   -- ^ The sender's current TCP CWND value.
-  SettingsDownloadRetrainsRate |
+  SettingsDownloadRetransRate |
   -- ^ The sender's retransmission rate (bytes retransmitted / total
   -- bytes transmitted).
   SettingsInitialWindowSize |
