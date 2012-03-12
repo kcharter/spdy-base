@@ -108,3 +108,19 @@ instance Arbitrary TerminationStatus where
                             StreamAlreadyClosed,
                             InvalidCredentials,
                             FrameTooLarge ]
+
+instance Arbitrary SettingID where
+  arbitrary =
+    frequency [(length fixedValues, elements fixedValues)
+              ,(1, (SettingsOther . fromIntegral) <$> choose (length fixedValues, 1023))]
+      where fixedValues = [  SettingsUploadBandwidth,
+                             SettingsDownloadBandwidth,
+                             SettingsRoundTripTime,
+                             SettingsMaxConcurrentStreams,
+                             SettingsCurrentCWND,
+                             SettingsDownloadRetransRate,
+                             SettingsInitialWindowSize,
+                             SettingsClientCertificateVectorSize ]
+
+instance Arbitrary SettingValue where
+  arbitrary = (SettingValue . fromIntegral) <$> choose (0, 2 ^ 24 - 1 :: Int)

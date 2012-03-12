@@ -24,7 +24,9 @@ test = testGroup "Build-parse tests"
        , testProperty "HeaderValue" prop_buildParseHeaderValue
        , testProperty "Priority" prop_buildParsePriority
        , testProperty "Slot" prop_buildParseSlot
-       , testProperty "TerminationStatus" prop_buildParseTerminationStatus ]
+       , testProperty "TerminationStatus" prop_buildParseTerminationStatus
+       , testProperty "SettingID" prop_buildParseSettingID
+       , testProperty "SettingValue" prop_buildParseSettingValue ]
 
 prop_buildParseRawFrameHeader :: RawFrameHeader -> Bool
 prop_buildParseRawFrameHeader = prop_buildParse rawHeaderBuilder parseFrameHeader
@@ -52,6 +54,12 @@ prop_buildParseHeaderValue = prop_buildParse toBuilder parseHeaderValue
 
 prop_buildParseTerminationStatus :: TerminationStatus -> Bool
 prop_buildParseTerminationStatus = prop_buildParse toBuilder parseTerminationStatus
+
+prop_buildParseSettingID :: SettingID -> Bool
+prop_buildParseSettingID = prop_buildParse toBuilder parseSettingID
+
+prop_buildParseSettingValue :: SettingValue -> Bool
+prop_buildParseSettingValue = prop_buildParse toBuilder parseSettingValue
 
 prop_buildParse :: Eq a => (a -> Builder) -> Parser a -> a -> Bool
 prop_buildParse builderFor parser =

@@ -114,5 +114,21 @@ parseTerminationStatus =
                      | w == tsFrameTooLarge = FrameTooLarge
                      | otherwise = TerminationStatusUnknown w
 
+parseSettingID :: Parser SettingID
+parseSettingID =
+  fmap toID anyWord24
+    where toID w | w == stidSettingsUploadBandwidth = SettingsUploadBandwidth
+                 | w == stidSettingsDownloadBandwidth = SettingsDownloadBandwidth
+                 | w == stidSettingsRoundTripTime = SettingsRoundTripTime
+                 | w == stidSettingsMaxConcurrentStreams = SettingsMaxConcurrentStreams
+                 | w == stidSettingsCurrentCWND = SettingsCurrentCWND
+                 | w == stidSettingsDownloadRetransRate = SettingsDownloadRetransRate
+                 | w == stidSettingsInitialWindowSize = SettingsInitialWindowSize
+                 | w == stidSettingsClientCertificateVectorSize = SettingsClientCertificateVectorSize
+                 | otherwise = SettingsOther w
+
+parseSettingValue :: Parser SettingValue
+parseSettingValue = SettingValue <$> anyWord32
+
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString

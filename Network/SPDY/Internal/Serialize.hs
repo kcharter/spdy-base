@@ -9,7 +9,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List (foldl')
 import Data.Monoid
-import Data.Word (Word8, Word16)
+import Data.Word (Word8, Word16, Word32)
 
 import Network.SPDY.Compression (Deflate, compress)
 import Network.SPDY.Frames
@@ -23,12 +23,14 @@ rawFrameBuilder frame =
   fromByteString (payload frame)
 
 instance ToBuilder DataLength where
-  toBuilder (DataLength dl) =
-    fromWord8 dlHi8 `mappend`
-    fromWord16be dlLo16
-      where dlHi8 = fromIntegral $ (dl `shiftR` 16) .&. 0xff
-            dlLo16 = fromIntegral $ dl .&. 0xffff
+  toBuilder (DataLength dl) = fromWord24be dl
 
+fromWord24be :: Word32 -> Builder
+fromWord24be w =
+  fromWord8 wHi8 `mappend`
+  fromWord16be wLo16
+    where wHi8 = fromIntegral $ (w `shiftR` 16) .&. 0xff
+          wLo16 = fromIntegral $ w .&. 0xffff
 
 rawHeaderBuilder :: RawFrameHeader -> Builder
 rawHeaderBuilder header =
@@ -170,3 +172,18 @@ instance ToBuilder TerminationStatus where
     InvalidCredentials -> tsInvalidCredentials
     FrameTooLarge -> tsFrameTooLarge
     TerminationStatusUnknown w -> w
+
+instance ToBuilder SettingID where
+  toBuilder stid = fromWord24be $ case stid of
+    SettingsUploadBandwidth -> stidSettingsUploadBandwidth
+    SettingsDownloadBandwidth -> stidSettingsDownloadBandwidth
+    SettingsRoundTripTime -> stidSettingsRoundTripTime
+    SettingsMaxConcurrentStreams -> stidSettingsMaxConcurrentStreams
+    SettingsCurrentCWND -> stidSettingsCurrentCWND
+    SettingsDownloadRetransRate -> stidSettingsDownloadRetransRate
+    SettingsInitialWindowSize -> stidSettingsInitialWindowSize
+    SettingsClientCertificateVectorSize -> stidSettingsClientCertificateVectorSize
+    SettingsOther w -> w
+
+instance ToBuilder SettingValue where
+  toBuilder (SettingValue sv) = fromWord32be sv

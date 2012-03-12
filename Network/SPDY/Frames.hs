@@ -425,6 +425,30 @@ instance Flag SettingIDFlag where
   bit SettingIDFlagPersistValue = 0
   bit SettingIDFlagPersisted = 1
 
+stidSettingsUploadBandwidth :: Word32
+stidSettingsUploadBandwidth = 1
+
+stidSettingsDownloadBandwidth :: Word32
+stidSettingsDownloadBandwidth = 2
+
+stidSettingsRoundTripTime :: Word32
+stidSettingsRoundTripTime = 3
+
+stidSettingsMaxConcurrentStreams :: Word32
+stidSettingsMaxConcurrentStreams = 4
+
+stidSettingsCurrentCWND :: Word32
+stidSettingsCurrentCWND = 5
+
+stidSettingsDownloadRetransRate :: Word32
+stidSettingsDownloadRetransRate = 6
+
+stidSettingsInitialWindowSize :: Word32
+stidSettingsInitialWindowSize = 7
+
+stidSettingsClientCertificateVectorSize :: Word32
+stidSettingsClientCertificateVectorSize = 8
+
 -- | A setting ID. IDs defined in the specification are given their
 -- own variants, with 'SettingsOther' as a catch-all for unrecognized
 -- settings.
