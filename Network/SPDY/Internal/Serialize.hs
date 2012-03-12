@@ -102,7 +102,7 @@ toControlPayloadBuilder deflate details =
     Settings _ pairs ->
       return $ toBuilder pairs
     Ping pid ->
-      error "ni"
+      return $ toBuilder pid
     GoAway sid status ->
       error "ni"
     Headers _ sid hb ->

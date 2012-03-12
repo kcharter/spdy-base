@@ -73,7 +73,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftSettings =
       Settings (Flags flags) <$> parsePayload parseSettingPairs pl
   | ctype == cftPing =
-      error "ni"
+      Ping <$> parsePayload parsePingID pl
   | ctype == cftGoAway =
       error "ni"
   | ctype == cftHeaders =
