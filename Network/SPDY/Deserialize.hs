@@ -71,7 +71,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftRstStream =
       fmap (uncurry RstStream) $ parsePayload parseRstStreamContent pl
   | ctype == cftSettings =
-      error "ni"
+      Settings (Flags flags) <$> parsePayload parseSettingPairs pl
   | ctype == cftPing =
       error "ni"
   | ctype == cftGoAway =

@@ -115,6 +115,11 @@ parseTerminationStatus =
                      | w == tsFrameTooLarge = FrameTooLarge
                      | otherwise = TerminationStatusUnknown w
 
+parseSettingPairs :: Parser [(SettingIDAndFlags, SettingValue)]
+parseSettingPairs = do
+  n <- fmap fromIntegral anyWord32
+  replicateM n ((,) <$> parseSettingIDAndFlags <*> parseSettingValue)
+
 parseSettingIDAndFlags :: Parser SettingIDAndFlags
 parseSettingIDAndFlags =
   SettingIDAndFlags <$> parseSettingIDFlags <*> parseSettingID

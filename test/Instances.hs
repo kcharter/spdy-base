@@ -58,7 +58,8 @@ instance Arbitrary ControlFrameDetails where
   arbitrary =
     oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
           , SynReply <$> arbitrary <*> arbitrary <*> arbitrary
-          , RstStream <$> arbitrary <*> arbitrary ]
+          , RstStream <$> arbitrary <*> arbitrary
+          , Settings <$> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -108,6 +109,9 @@ instance Arbitrary TerminationStatus where
                             StreamAlreadyClosed,
                             InvalidCredentials,
                             FrameTooLarge ]
+
+instance Arbitrary SettingsFlag where
+  arbitrary = elements [ SettingsFlagClearSettings ]
 
 instance Arbitrary SettingIDAndFlags where
   arbitrary = SettingIDAndFlags <$> arbitrary <*> arbitrary

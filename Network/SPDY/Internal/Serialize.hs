@@ -100,7 +100,7 @@ toControlPayloadBuilder deflate details =
     RstStream sid status ->
       return $ toBuilder sid `mappend` toBuilder status
     Settings _ pairs ->
-      error "ni"
+      return $ toBuilder pairs
     Ping pid ->
       error "ni"
     GoAway sid status ->
@@ -173,6 +173,12 @@ instance ToBuilder TerminationStatus where
     InvalidCredentials -> tsInvalidCredentials
     FrameTooLarge -> tsFrameTooLarge
     TerminationStatusUnknown w -> w
+
+instance ToBuilder [(SettingIDAndFlags, SettingValue)] where
+  toBuilder pairs =
+    fromWord32be (fromIntegral $ length pairs) `mappend`
+    foldl' mappend mempty (map fromPair pairs)
+      where fromPair (idfs, v) = toBuilder idfs `mappend` toBuilder v
 
 instance ToBuilder SettingIDAndFlags where
   toBuilder stidfs =
