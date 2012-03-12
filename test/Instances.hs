@@ -123,7 +123,7 @@ instance Arbitrary SettingIDFlag where
 instance Arbitrary SettingID where
   arbitrary =
     frequency [(length fixedValues, elements fixedValues)
-              ,(1, (SettingsOther . fromIntegral) <$> choose (length fixedValues, 1023))]
+              ,(1, (SettingsOther . fromIntegral) <$> choose (length fixedValues + 1, 1023))]
       where fixedValues = [  SettingsUploadBandwidth,
                              SettingsDownloadBandwidth,
                              SettingsRoundTripTime,
