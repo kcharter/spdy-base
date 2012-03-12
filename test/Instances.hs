@@ -135,3 +135,6 @@ instance Arbitrary SettingID where
 
 instance Arbitrary SettingValue where
   arbitrary = (SettingValue . fromIntegral) <$> choose (0, 2 ^ 24 - 1 :: Int)
+
+instance Arbitrary PingID where
+  arbitrary = (PingID . fromIntegral) <$> choose (0, 2 ^ 29 - 1 :: Int)

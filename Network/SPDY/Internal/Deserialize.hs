@@ -143,5 +143,8 @@ parseSettingID =
 parseSettingValue :: Parser SettingValue
 parseSettingValue = SettingValue <$> anyWord32
 
+parsePingID :: Parser PingID
+parsePingID = PingID <$> anyWord32
+
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString
