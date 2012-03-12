@@ -9,6 +9,7 @@ import Data.ByteString (ByteString)
 import Data.Word
 
 import Network.SPDY.Frames
+import Network.SPDY.Flags
 
 parseFrameHeader :: Parser RawFrameHeader
 parseFrameHeader = fromBytes <$> anyWord8 <*> anyWord8 <*> anyWord8 <*> anyWord8
@@ -113,6 +114,13 @@ parseTerminationStatus =
                      | w == tsInvalidCredentials = InvalidCredentials
                      | w == tsFrameTooLarge = FrameTooLarge
                      | otherwise = TerminationStatusUnknown w
+
+parseSettingIDAndFlags :: Parser SettingIDAndFlags
+parseSettingIDAndFlags =
+  SettingIDAndFlags <$> parseSettingIDFlags <*> parseSettingID
+
+parseSettingIDFlags :: Parser (Flags SettingIDFlag)
+parseSettingIDFlags = Flags <$> anyWord8
 
 parseSettingID :: Parser SettingID
 parseSettingID =

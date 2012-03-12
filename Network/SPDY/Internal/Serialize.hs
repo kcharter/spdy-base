@@ -12,6 +12,7 @@ import Data.Monoid
 import Data.Word (Word8, Word16, Word32)
 
 import Network.SPDY.Compression (Deflate, compress)
+import Network.SPDY.Flags
 import Network.SPDY.Frames
 import Network.SPDY.Internal.ToWord8
 
@@ -173,6 +174,11 @@ instance ToBuilder TerminationStatus where
     FrameTooLarge -> tsFrameTooLarge
     TerminationStatusUnknown w -> w
 
+instance ToBuilder SettingIDAndFlags where
+  toBuilder stidfs =
+    toBuilder (settingIDFlags stidfs) `mappend`
+    toBuilder (settingID stidfs)
+
 instance ToBuilder SettingID where
   toBuilder stid = fromWord24be $ case stid of
     SettingsUploadBandwidth -> stidSettingsUploadBandwidth
@@ -187,3 +193,6 @@ instance ToBuilder SettingID where
 
 instance ToBuilder SettingValue where
   toBuilder (SettingValue sv) = fromWord32be sv
+
+instance ToBuilder (Flags f) where
+  toBuilder (Flags w) = fromWord8 w

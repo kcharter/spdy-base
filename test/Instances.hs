@@ -109,6 +109,13 @@ instance Arbitrary TerminationStatus where
                             InvalidCredentials,
                             FrameTooLarge ]
 
+instance Arbitrary SettingIDAndFlags where
+  arbitrary = SettingIDAndFlags <$> arbitrary <*> arbitrary
+
+instance Arbitrary SettingIDFlag where
+  arbitrary = elements [ SettingIDFlagPersistValue
+                       , SettingIDFlagPersisted ]
+
 instance Arbitrary SettingID where
   arbitrary =
     frequency [(length fixedValues, elements fixedValues)
