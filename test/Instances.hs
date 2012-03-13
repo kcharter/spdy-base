@@ -60,7 +60,8 @@ instance Arbitrary ControlFrameDetails where
           , SynReply <$> arbitrary <*> arbitrary <*> arbitrary
           , RstStream <$> arbitrary <*> arbitrary
           , Settings <$> arbitrary <*> arbitrary
-          , Ping <$> arbitrary ]
+          , Ping <$> arbitrary
+          , GoAway <$> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin

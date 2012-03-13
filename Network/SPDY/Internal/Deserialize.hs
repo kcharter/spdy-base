@@ -64,6 +64,9 @@ parseSynReplyContent = do
 parseRstStreamContent :: Parser (StreamID, TerminationStatus)
 parseRstStreamContent = (,) <$> parseStreamID <*> parseTerminationStatus
 
+parseGoAwayContent :: Parser (StreamID, GoAwayStatus)
+parseGoAwayContent = (,) <$> parseStreamID <*> parseGoAwayStatus
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 

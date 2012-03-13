@@ -104,7 +104,7 @@ toControlPayloadBuilder deflate details =
     Ping pid ->
       return $ toBuilder pid
     GoAway sid status ->
-      error "ni"
+      return $ toBuilder sid `mappend` toBuilder status
     Headers _ sid hb ->
       error "ni"
     WindowUpdate sid dws ->
