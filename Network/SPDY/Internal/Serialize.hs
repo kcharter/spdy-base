@@ -108,7 +108,7 @@ toControlPayloadBuilder deflate details =
     Headers _ sid hb ->
       return $ toBuilder sid `mappend` toBuilder hb
     WindowUpdate sid dws ->
-      error "ni"
+      return $ toBuilder sid `mappend` toBuilder dws
     Credential slot proof certs ->
       error "ni"
 

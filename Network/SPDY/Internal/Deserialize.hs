@@ -70,6 +70,9 @@ parseGoAwayContent = (,) <$> parseStreamID <*> parseGoAwayStatus
 parseHeadersContent :: Parser (StreamID, HeaderBlock)
 parseHeadersContent = (,) <$> parseStreamID <*> parseHeaderBlock
 
+parseWindowUpdateContent :: Parser (StreamID, DeltaWindowSize)
+parseWindowUpdateContent = (,) <$> parseStreamID <*> parseDeltaWindowSize
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 
@@ -159,6 +162,9 @@ parseGoAwayStatus =
                      | w == gsGoAwayProtocolError = GoAwayProtocolError
                      | w == gsGoAwayInternalError = GoAwayInternalError
                      | otherwise = GoAwayStatusUnknown w
+
+parseDeltaWindowSize :: Parser DeltaWindowSize
+parseDeltaWindowSize = DeltaWindowSize <$> anyWord32
 
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString

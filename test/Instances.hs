@@ -62,7 +62,8 @@ instance Arbitrary ControlFrameDetails where
           , Settings <$> arbitrary <*> arbitrary
           , Ping <$> arbitrary
           , GoAway <$> arbitrary <*> arbitrary
-          , Headers <$> arbitrary <*> arbitrary <*> arbitrary ]
+          , Headers <$> arbitrary <*> arbitrary <*> arbitrary
+          , WindowUpdate <$> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -152,3 +153,6 @@ instance Arbitrary GoAwayStatus where
 
 instance Arbitrary HeadersFlag where
   arbitrary = return HeadersFlagFin
+
+instance Arbitrary DeltaWindowSize where
+  arbitrary = (DeltaWindowSize . fromIntegral) <$> choose (0, 2 ^ 31 - 1 :: Integer)

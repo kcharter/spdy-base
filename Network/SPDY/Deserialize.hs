@@ -79,7 +79,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftHeaders =
       uncurry (Headers (Flags flags)) <$> parsePayload parseHeadersContent pl
   | ctype == cftWindowUpdate =
-      error "ni"
+      uncurry WindowUpdate <$> parsePayload parseWindowUpdateContent pl
   | ctype == cftCredential =
       error "ni"
   | otherwise =

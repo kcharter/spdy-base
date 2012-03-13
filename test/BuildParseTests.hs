@@ -29,7 +29,8 @@ test = testGroup "Build-parse tests"
        , testProperty "SettingValue" prop_buildParseSettingValue
        , testProperty "SettingIDAndFlags" prop_buildParseSettingIDAndFlags
        , testProperty "PingID" prop_buildParsePingID
-       , testProperty "GoAwayStatus" prop_buildParseGoAwayStatus ]
+       , testProperty "GoAwayStatus" prop_buildParseGoAwayStatus
+       , testProperty "DeltaWindowSize" prop_buildParseDeltaWindowSize ]
 
 prop_buildParseRawFrameHeader :: RawFrameHeader -> Bool
 prop_buildParseRawFrameHeader = prop_buildParse rawHeaderBuilder parseFrameHeader
@@ -72,6 +73,9 @@ prop_buildParsePingID = prop_buildParse toBuilder parsePingID
 
 prop_buildParseGoAwayStatus :: GoAwayStatus -> Bool
 prop_buildParseGoAwayStatus = prop_buildParse toBuilder parseGoAwayStatus
+
+prop_buildParseDeltaWindowSize :: DeltaWindowSize -> Bool
+prop_buildParseDeltaWindowSize = prop_buildParse toBuilder parseDeltaWindowSize
 
 prop_buildParse :: Eq a => (a -> Builder) -> Parser a -> a -> Bool
 prop_buildParse builderFor parser =
