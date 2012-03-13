@@ -67,6 +67,9 @@ parseRstStreamContent = (,) <$> parseStreamID <*> parseTerminationStatus
 parseGoAwayContent :: Parser (StreamID, GoAwayStatus)
 parseGoAwayContent = (,) <$> parseStreamID <*> parseGoAwayStatus
 
+parseHeadersContent :: Parser (StreamID, HeaderBlock)
+parseHeadersContent = (,) <$> parseStreamID <*> parseHeaderBlock
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 

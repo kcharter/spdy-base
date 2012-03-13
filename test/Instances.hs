@@ -61,7 +61,8 @@ instance Arbitrary ControlFrameDetails where
           , RstStream <$> arbitrary <*> arbitrary
           , Settings <$> arbitrary <*> arbitrary
           , Ping <$> arbitrary
-          , GoAway <$> arbitrary <*> arbitrary ]
+          , GoAway <$> arbitrary <*> arbitrary
+          , Headers <$> arbitrary <*> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -148,3 +149,6 @@ instance Arbitrary GoAwayStatus where
       where fixedValues = [ GoAwayOK,
                             GoAwayProtocolError,
                             GoAwayInternalError ]
+
+instance Arbitrary HeadersFlag where
+  arbitrary = return HeadersFlagFin
