@@ -73,6 +73,9 @@ parseHeadersContent = (,) <$> parseStreamID <*> parseHeaderBlock
 parseWindowUpdateContent :: Parser (StreamID, DeltaWindowSize)
 parseWindowUpdateContent = (,) <$> parseStreamID <*> parseDeltaWindowSize
 
+parseCredentialContent :: Parser (Slot16, Proof, [Certificate])
+parseCredentialContent = (,,) <$> parseSlot16 <*> parseProof <*> parseCertificates
+
 parseStreamID :: Parser StreamID
 parseStreamID = StreamID <$> anyWord32
 
