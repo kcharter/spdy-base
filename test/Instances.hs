@@ -156,3 +156,12 @@ instance Arbitrary HeadersFlag where
 
 instance Arbitrary DeltaWindowSize where
   arbitrary = (DeltaWindowSize . fromIntegral) <$> choose (0, 2 ^ 31 - 1 :: Integer)
+
+instance Arbitrary Slot16 where
+  arbitrary = (Slot16 . fromIntegral) <$> choose (0, 2 ^ 16 - 1 :: Int)
+
+instance Arbitrary Proof where
+  arbitrary = Proof <$> arbitrary
+
+instance Arbitrary Certificate where
+  arbitrary = Certificate <$> arbitrary

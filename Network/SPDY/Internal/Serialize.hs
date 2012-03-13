@@ -110,7 +110,7 @@ toControlPayloadBuilder deflate details =
     WindowUpdate sid dws ->
       return $ toBuilder sid `mappend` toBuilder dws
     Credential slot proof certs ->
-      error "ni"
+      return $ toBuilder slot `mappend` toBuilder proof `mappend` toBuilder certs
 
 compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder
 compressHeaderBlock deflate hb =
@@ -206,6 +206,18 @@ instance ToBuilder GoAwayStatus where
     GoAwayProtocolError -> gsGoAwayProtocolError
     GoAwayInternalError -> gsGoAwayInternalError
     GoAwayStatusUnknown w -> w
+
+instance ToBuilder Slot16 where
+  toBuilder (Slot16 w) = fromWord16be w
+
+instance ToBuilder Proof where
+  toBuilder (Proof bs) = lengthAndBytes bs
+
+instance ToBuilder [Certificate] where
+  toBuilder = foldl' mappend mempty . map toBuilder
+
+instance ToBuilder Certificate where
+  toBuilder (Certificate bs) = lengthAndBytes bs
 
 instance ToBuilder (Flags f) where
   toBuilder (Flags w) = fromWord8 w

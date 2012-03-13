@@ -166,5 +166,17 @@ parseGoAwayStatus =
 parseDeltaWindowSize :: Parser DeltaWindowSize
 parseDeltaWindowSize = DeltaWindowSize <$> anyWord32
 
+parseSlot16 :: Parser Slot16
+parseSlot16 = Slot16 <$> anyWord16
+
+parseProof :: Parser Proof
+parseProof = Proof <$> parseLengthAndBytes
+
+parseCertificates :: Parser [Certificate]
+parseCertificates = many parseCertificate
+
+parseCertificate :: Parser Certificate
+parseCertificate = Certificate <$> parseLengthAndBytes
+
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString

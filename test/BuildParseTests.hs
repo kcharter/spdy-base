@@ -30,7 +30,10 @@ test = testGroup "Build-parse tests"
        , testProperty "SettingIDAndFlags" prop_buildParseSettingIDAndFlags
        , testProperty "PingID" prop_buildParsePingID
        , testProperty "GoAwayStatus" prop_buildParseGoAwayStatus
-       , testProperty "DeltaWindowSize" prop_buildParseDeltaWindowSize ]
+       , testProperty "DeltaWindowSize" prop_buildParseDeltaWindowSize
+       , testProperty "Slot16" prop_buildParseSlot16
+       , testProperty "Proof" prop_buildParseProof
+       , testProperty "Certificate" prop_buildParseCertificate ]
 
 prop_buildParseRawFrameHeader :: RawFrameHeader -> Bool
 prop_buildParseRawFrameHeader = prop_buildParse rawHeaderBuilder parseFrameHeader
@@ -76,6 +79,15 @@ prop_buildParseGoAwayStatus = prop_buildParse toBuilder parseGoAwayStatus
 
 prop_buildParseDeltaWindowSize :: DeltaWindowSize -> Bool
 prop_buildParseDeltaWindowSize = prop_buildParse toBuilder parseDeltaWindowSize
+
+prop_buildParseSlot16 :: Slot16 -> Bool
+prop_buildParseSlot16 = prop_buildParse toBuilder parseSlot16
+
+prop_buildParseProof :: Proof -> Bool
+prop_buildParseProof = prop_buildParse toBuilder parseProof
+
+prop_buildParseCertificate :: Certificate -> Bool
+prop_buildParseCertificate = prop_buildParse toBuilder parseCertificate
 
 prop_buildParse :: Eq a => (a -> Builder) -> Parser a -> a -> Bool
 prop_buildParse builderFor parser =
