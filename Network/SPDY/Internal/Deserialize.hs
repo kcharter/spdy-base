@@ -146,5 +146,13 @@ parseSettingValue = SettingValue <$> anyWord32
 parsePingID :: Parser PingID
 parsePingID = PingID <$> anyWord32
 
+parseGoAwayStatus :: Parser GoAwayStatus
+parseGoAwayStatus =
+  fmap toStatus anyWord32
+    where toStatus w | w == gsGoAwayOK = GoAwayOK
+                     | w == gsGoAwayProtocolError = GoAwayProtocolError
+                     | w == gsGoAwayInternalError = GoAwayInternalError
+                     | otherwise = GoAwayStatusUnknown w
+
 parseRest :: Parser ByteString
 parseRest = AP.takeByteString

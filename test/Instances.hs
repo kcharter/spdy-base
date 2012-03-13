@@ -139,3 +139,11 @@ instance Arbitrary SettingValue where
 
 instance Arbitrary PingID where
   arbitrary = (PingID . fromIntegral) <$> choose (0, 2 ^ 29 - 1 :: Int)
+
+instance Arbitrary GoAwayStatus where
+  arbitrary =
+    frequency [ (length fixedValues, elements fixedValues)
+              , (1, (GoAwayStatusUnknown . fromIntegral) <$> choose (12, 2 ^ 29 - 1 :: Int)) ]
+      where fixedValues = [ GoAwayOK,
+                            GoAwayProtocolError,
+                            GoAwayInternalError ]

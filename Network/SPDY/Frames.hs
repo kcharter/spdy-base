@@ -495,6 +495,16 @@ newtype SettingValue = SettingValue Word32 deriving (Eq, Show, Read)
 -- initiates an identical ping at the same time.
 newtype PingID = PingID Word32 deriving (Eq, Show, Read)
 
+gsGoAwayOK :: Word32
+gsGoAwayOK = 0
+
+gsGoAwayProtocolError :: Word32
+gsGoAwayProtocolError = 1
+
+gsGoAwayInternalError :: Word32
+gsGoAwayInternalError = 11
+
+
 -- | The reasons for receiving a 'GoAway' frame.
 data GoAwayStatus =
   GoAwayOK |

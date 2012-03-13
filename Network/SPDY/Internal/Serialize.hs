@@ -200,5 +200,12 @@ instance ToBuilder SettingID where
 instance ToBuilder SettingValue where
   toBuilder (SettingValue sv) = fromWord32be sv
 
+instance ToBuilder GoAwayStatus where
+  toBuilder s = fromWord32be $ case s of
+    GoAwayOK -> gsGoAwayOK
+    GoAwayProtocolError -> gsGoAwayProtocolError
+    GoAwayInternalError -> gsGoAwayInternalError
+    GoAwayStatusUnknown w -> w
+
 instance ToBuilder (Flags f) where
   toBuilder (Flags w) = fromWord8 w
