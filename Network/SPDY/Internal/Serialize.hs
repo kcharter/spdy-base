@@ -14,6 +14,7 @@ import Data.Word (Word8, Word16, Word32)
 import Network.SPDY.Compression (Deflate, compress)
 import Network.SPDY.Flags
 import Network.SPDY.Frames
+import Network.SPDY.Internal.Constants
 import Network.SPDY.Internal.ToWord8
 
 rawFrameBuilder :: RawFrame -> Builder

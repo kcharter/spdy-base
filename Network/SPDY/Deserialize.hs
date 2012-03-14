@@ -19,6 +19,7 @@ import Data.Word
 import Network.SPDY.Compression (Inflate, decompress)
 import Network.SPDY.Flags
 import Network.SPDY.Frames
+import Network.SPDY.Internal.Constants
 import Network.SPDY.Internal.Deserialize
 
 -- | Parse a raw frame from a strict 'ByteString'.

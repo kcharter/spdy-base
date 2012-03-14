@@ -10,6 +10,7 @@ import Data.Word
 
 import Network.SPDY.Frames
 import Network.SPDY.Flags
+import Network.SPDY.Internal.Constants
 
 parseFrameHeader :: Parser RawFrameHeader
 parseFrameHeader = fromBytes <$> anyWord8 <*> anyWord8 <*> anyWord8 <*> anyWord8
