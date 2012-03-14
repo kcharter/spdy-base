@@ -5,9 +5,7 @@ import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
 import Test.QuickCheck.Property (morallyDubiousIOProperty)
-import Codec.Zlib (Inflate,
-                   Deflate,
-                   initDeflateWithDictionary,
+import Codec.Zlib (initDeflateWithDictionary,
                    initInflateWithDictionary,
                    defaultWindowBits)
 
@@ -16,7 +14,8 @@ import Network.SPDY.Deserialize
 import Network.SPDY.Frames
 import Network.SPDY.Serialize
 
-import Instances
+import Instances ()
+
 
 test :: Test
 test = testGroup "Frame tests" [

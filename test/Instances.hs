@@ -2,7 +2,6 @@ module Instances where
 
 import Control.Applicative
 import Data.ByteString (ByteString, pack)
-import Data.Word
 import Test.QuickCheck
 
 import Network.SPDY.Flags

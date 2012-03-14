@@ -1,18 +1,17 @@
 module BuildParseTests (test) where
 
 import Blaze.ByteString.Builder (Builder, toByteString)
-import Control.Applicative ((<$>))
 import Data.ByteString (ByteString)
 import Data.Attoparsec.ByteString (Parser, parseOnly, endOfInput)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
-import Test.QuickCheck
 
 import Network.SPDY.Frames
 import Network.SPDY.Internal.Deserialize
 import Network.SPDY.Internal.Serialize
 
-import Instances
+import Instances ()
+
 
 test :: Test
 test = testGroup "Build-parse tests"

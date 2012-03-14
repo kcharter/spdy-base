@@ -2,13 +2,13 @@ module RawFrameTests where
 
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
-import Test.QuickCheck
 
 import Network.SPDY.Deserialize
 import Network.SPDY.Frames
 import Network.SPDY.Serialize
 
-import Instances
+import Instances ()
+
 
 test :: Test
 test = testGroup "Raw frame tests" [
