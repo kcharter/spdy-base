@@ -1,7 +1,8 @@
 module FrameTests where
 
 import Control.Applicative ((<$>))
-import Test.Framework (Test, testGroup)
+import Data.Monoid
+import Test.Framework (Test, testGroup, plusTestOptions, topt_maximum_generated_tests)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
 import Test.QuickCheck.Property (morallyDubiousIOProperty)
@@ -19,8 +20,13 @@ import Instances ()
 
 test :: Test
 test = testGroup "Frame tests" [
-  testProperty "to-raw-frame-and-back" prop_toRawFrameAndBack
+  -- Because there is a large variety of frame types, we tell
+  -- test-framework to use up to 1000 test iterations for this
+  -- test. In practice, we'll run 1000 test iterations, despite the
+  -- name 'topt_maximum_generated_tests'
+  plusTestOptions opts $ testProperty "to-raw-frame-and-back" prop_toRawFrameAndBack
   ]
+  where opts = mempty { topt_maximum_generated_tests = Just 1000 }
 
 prop_toRawFrameAndBack :: Frame -> Gen Prop
 prop_toRawFrameAndBack frame =
