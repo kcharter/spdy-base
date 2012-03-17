@@ -1,0 +1,31 @@
+Lessons from Warp
+=================
+
+Warp is the web server that is used as the default WAI handler in the
+Yesod web framework. It's got a reputation for being fast, perhaps
+still the fastest of the Haskell HTTP servers. So I decided to peak
+inside the source and see whether there were any interesting ways of
+handling mutable state.
+
+Warp turns out to be very small, less than 1000 lines of code. About
+the only interesting piece of global state is a set of handles for
+thread-specific timeouts. These timeouts are used as a defense against
+the 'slowloris' denial-of-service attack. The handles are maintained
+in a central list, and there is a single timeout manager thread that
+maintains the list. Yesod forks a new thread for each incoming
+request, and assigns a timeout to it; the request thread has access to
+its associated timeout, and 'tickles' the timeout when interesting
+milestones occur, like receiving headers or body bytes for the
+request, or sending data in the response.
+
+What is interesting about these timeouts is that they involve mutable
+state, but use plain old IORefs and the function
+'atomicallyModifyIORef' instead of using MVars. Michael Snoyman
+explains this choice in the article "Warp: A Haskell Web Server" in
+the May/June 2011 issue of IEEE Internet Computing. He says that they
+found that the locking overhead of MVars imposed a noticeable
+performance penalty.
+
+So it looks like it might be a good idea to do something similar
+here. The mutable state within a SPDY client is going to have to be
+quite a bit more involved I think, but perhaps the same lessons apply.
