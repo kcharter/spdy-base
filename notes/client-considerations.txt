@@ -1,0 +1,340 @@
+SPDY Client Considerations
+==========================
+
+In this document,
+
+- "client" means a SPDY client or a combination SPDY/HTTP client, one
+  endpoint for SPDY connections.
+
+- "server" means a SPDY server of a combination SPDY/HTTP server, the
+  other endpoint for SPDY connections.
+
+- "application" is the client-side software layer that is itself a
+  client of the SPDY client; this is the part that makes requests
+  through the client API. It might, for example, be a web browser.
+
+Here are some notes taken while reading through the SPDY spec, with
+particular attention to implications for our implementation of a SPDY
+client. The goal is to figure out a rough sketch of what a client API
+should look like, and what it's internal state might look like.
+
+- because of server push, a client must be able to cache pushed
+  resources that the application has not yet requested. This *may*
+  require being able to store resources on disk instead of in memory.
+
+- state needs to record
+
+  - persisted settings keyed by (origin, IP address, port) triples;
+    see the stuff on settings below. These are supposed to be
+    remembered across connections to the same server (Note: it's
+    possible that the spec really means *either* an origin *or* an (IP
+    address, port) pair suffices as a key, and that we should store
+    the settings under both possible keys. Despite obvious pains to be
+    clear, it's not)
+
+  - sessions, one for each unique server endpoint; within each
+    session:
+
+    - some kind of reference to the lower-level transport state
+      (e.g. a socket)
+
+    - a stream ID counter for allocating new stream IDs; on the client
+      side, this must start at 2, and increase by 2 each time a new ID
+      is allocated.
+
+    - zlib compression stream
+
+    - open streams; for each of these:
+
+      - a set of headers (name-value pairs) received so far
+
+      - a set of data chunks received so far
+
+      - some indication of the state of the stream (half-open, open,
+        half-closed, closed, ...?; see below)
+
+      - stream priority; this might be necessary on the client too,
+        since it's possible to send data to the server through, for
+        example, and HTTP POST implemented atop the SPDY client. I'm
+        not sure whether it's necessary to know the priority
+        associated with a stream on which you intend only to receive
+        data, except possibly to detect whether the server seems to be
+        obeying the priority. (observing priority is best-effort, so
+        perhaps that's not very useful)
+
+      - a data window size; this is used by the flow-control mechanism
+        that is implemented using WINDOW_UPDATE frames. It's updated
+        whenever data is sent on the stream, and whenever the
+        recipient says it has received and processed a chunk of data
+        by sending a WINDOW_UPDATE frame.
+
+    - last sent PING ID; for the client, this must be an odd number
+      starting at 1, and each time a number is allocated this should
+      increment by 2
+
+      - unlike stream IDs, PING IDs are allowed to wrap
+
+  - note that we probably want to maintain sessions in a data
+    structure where we can look them up by the same kind of key we use
+    for storing settings. The key should be derivable from a URI or
+    some kind of connection parameters, so that we can decide whether
+    to create a new stream in an existing session, or start a whole
+    new session, when we receive a request for a resource.
+
+- when the client wishes to close a session, it must issue a GO_AWAY
+  frame (see section 2.1); the same goes for the server.
+
+- an implementation must be able to receive control frames that are at
+  least 8192 octets in length.
+
+- see 'Data frame processing requirements' in the section on data
+  frames for two scenarios in which sending a stream error is
+  warranted.
+
+  - since it's an error to recieve data frames on a stream for which
+    we have not received a SYN_REPLY, this means we need to
+    distinguish states for a stream:
+
+    - half-open: we have sent SYN_STREAM, but have not yet received
+      the corresponding SYN_REPLY
+
+      - when a stream is half-open, it is allowed to send HEADERS and
+        DATA frames for the stream, before receiving the SYN_REPLY
+
+    - open: we have received the corresponding SYN_REPLY
+
+    - half-closed: we have sent RST_STREAM
+
+    - closed: RST_STREAM is acknowledged; this may be a transient
+      state, or we may discard the stream state immediately; I'm not
+      sure which would be better
+
+      - actually, we need a 'closed' state, because we cannot discard
+        the data received on the stream until the application has
+        consumed it. Therefore, we need a way of knowing whether an
+        application has consumed the data, or for it to signal that
+        the contents of the stream are no longer of interest.
+
+    - streams can also be created unidirectional; in this case, only
+      the creating endpoint is supposed to be able to create frames. I
+      *presume* it's an error if the creating endpoint receives frames
+      from the other endpoint, but I'm not sure exactly what error is
+      supposed to be sent.
+
+- the stream IDs must be non-zero and must be odd for client-initiated
+  streams and even for server-initiated streams
+
+- stream IDs do not wrap; if a client exhausts the set of possible
+  stream IDs for a connection, it cannot create any more streams. In
+  general, I imagine this means that the client should tear down the
+  connection as gracefully as possible and, if necessary, establish a
+  new connection to the same server, so that it can start over again
+  at stream ID 2.
+
+  - if you receive a SYN_STREAM on a connection with a stream ID equal
+    to a stream ID you've seen before, it must issue a session error
+    with the status PROTOCOL_ERROR
+
+- it is possible to refuse a SYN_STREAM by sending a stream error with
+  status REFUSED_STREAM; however, the creating endpoint may have
+  already sent other frames associated with the stream, which will
+  need to be ignored
+
+- HEADERS frames can be sent until the stream is half-closed
+
+- setting FLAG_FIN on a SYN_STREAM, SYN_REPLY, HEADERS, or DATA frame
+  puts the sending endpoint in the half-closed state for that stream;
+  the sender must not send any more frames on the stream
+
+  - in response to a frame sent from the endpoint for which the stream
+    is closed, the recipient must send a RST_STREAM frame back to the
+    sender with a status STREAM_ALREADY_CLOSED.
+
+- see section 2.3.7 (Stream close) for the ways in which a stream can
+  be closed; note we also have to take account of the abrupt closure
+  of the network transport (e.g. the other side closed the socket
+  underlying the connection).
+
+- see section 2.4 on the generalities of error handling.
+
+- when sending a SYN_STREAM, it's possible that the other endpoint
+  will respond with RST_STREAM with a status of
+  FRAME_TOO_LARGE. Provided the other endpoint supports the minimum
+  size for control frames (8k octects), the only reason for this would
+  be a block of headers that would be too large. Assuming that the
+  other side properly decompressed the headers so its compression
+  state is not corrupted, I *think* the intended way to recover is to
+  try a new SYN_STREAM with a smaller set of headers, and then to send
+  one or more HEADERS frames to transmit the remaining headers.
+
+  - See section 2.6.3 on the RST_STREAM frame, in the description of
+    FRAME_TOO_LARGE. It notes in particular that if you receive a
+    frame that is too large and cannot properly decompress all the
+    data, then your compression state is corrupt, and after sending
+    RST_STREAM with FRAME_TOO_LARGE, you must tear down the whole
+    session.
+
+  - ditto for SYN_REPLY. However, this raises a subtle issue. Since
+    the stream is reset, it's effectively closed. If the originating
+    endpoint tries a new SYN_STREAM, but we reply with the same
+    oversized SYN_REPLY, we've got a problem. To properly recover from
+    this, we would need to record for the other endpoint some guess at
+    what its header size was -- or else revert to the minimum control
+    frame size just to be safe.
+
+
+- Q: it's not clear to me whether SYN_REPLY echoes the headers
+  received in the SYN_STREAM, or whether it simply exchanges headers
+  that the receiving endpoint might want to inject. I should check the
+  spdy client source code in the Chromium tree to see.
+
+- data sent by SETTINGS frames are persisted only by clients; a client
+  cannot ask a server to persist settings with a SETTINGS frame with
+  the FLAG_SETTINGS_PERSIST_VALUE flag set on any of the name-value
+  pairs. Further, setting data is supposed to be persisted under both
+  origin and (IP address, port) pair, where the origin is the scheme,
+  host, and port part from a URI.
+
+  - since SETTINGS can be sent at either time, I suppose it's logical
+    that the client send a SETTINGS frame when it establishes a
+    connection with an endpoint for which it has persisted settings
+    data.
+
+  - it is not clear to me whether persisted settings are supposed to
+    survive restarts of the client. I suspect not.
+
+- the response to a PING frame is always to send an identical PING
+  frame as soon as possible -- PING always takes highest priority.
+
+  - if you receive a PING whose ID suggests you originated it, but you
+    didn't originate it, you simply ignore the frame
+
+- the GO_AWAY control frame signals that the sender is about to tear
+  down the whole connection, and the recipient should cease creating
+  streams or sending any other frames; however, see the notes about
+  last-stream-id
+
+- there are sanity checks that we must do on the contents of header
+  names and header values. If these sanity checks fail on the
+  recipient side, the recipient must issue a stream error with status
+  PROTOCOL_ERROR
+
+- although clients should not have more than one active SPDY session
+  to the same origin at the same time, it is possible to start a new
+  session when an existing session is in the process of shutting down.
+
+- when tearing down a session, a server is allowed to send a GO_AWAY
+  frame and then terminate it's side of the underlying network
+  transport connection, without transmitting data that is associated
+  with still-open streams. A client must be able to handle this case,
+  and the case in which the transport connection is disrupted.
+
+  - since streams are explicitly closed by exchanging frames with a
+    FIN flag set, it's possible for a client to employ a time-out for
+    a stream on which there has been no activity. I *think* that if
+    there is *any* stream which appears to be active on the
+    connection, it's probably a bad idea to tear the connection
+    down. However, if all streams reach some timeout without activity,
+    the client can tear down the connection, sending the obligatory
+    GO_AWAY frame and so on.
+
+- in section 3.2.2 (Response), which describes HTTP responses, it says
+  that
+
+    If a client receives a SYN_REPLY without a status or without a
+    version header, the client must reply with a RST_STREAM frame
+    indicating a PROTOCOL_ERROR
+
+  Note that 'status' and 'version header' refer to the HTTP status and
+  version header. What is interesting here is that if we layer HTTP on
+  top of SPDY, and the SPDY layer is not itself HTTP aware, then this
+  means that the HTTP layer must have a way to tell the SPDY layer to
+  signal a protocol error, even though the protocol error is not in
+  the SPDY protocol itself. This is a very concrete example of the
+  tight integration between SPDY and HTTP, and the fact that SPDY is
+  not really intended for serving up things other than web content.
+
+- I'll need to read rfc 2617 (on HTTP Basic and Digest authentication)
+  in order to figure out how authentication should work.
+
+- if a client receives a pushed resource which violates the
+  same-origin policy (described in RFC 6454), the client must send a
+  RST_STREAM. I'm not sure exactly what the status code should be, but
+  PROTOCOL_ERROR might be a good guess.
+
+- the 'associated-stream-id' field in a SYN_STREAM frame is used
+  during server push, to identify which client-initiated stream the
+  pushed resource is associated with.
+
+  - any headers that were sent by the server for the associated stream
+    are inherited by the pushed stream, except for ":host", ":scheme",
+    and ":path". This detail is probably a little too internal for us
+    to expect the HTTP layer to take care of it, so I think that
+    perhaps the framing layer should inject the headers. Since
+    ":host", ":path", and ":scheme" are supposed to accompany the
+    pushed response, the framing layer doesn't need to be concerned
+    about filtering them out, as long as it is careful to inject the
+    headers from the associated stream first, and then insert the
+    headers from the pushed stream.
+
+    There is one potential problem with this approach though. What if
+    the HTTP layer has completely read the headers and the content for
+    the associated stream before any of the pushed streams is opened?
+    The framing layer needs to know when it can free the resources
+    taken up by the original stream. If it does so before the pushed
+    resources begin to arrive, then it cannot automatically inject the
+    headers from the original stream. Hmmm. Punting the responsibility
+    to the HTTP layer really has the same problem: if HTTP layer needs
+    to remember headers just in case there are pushed resources, then
+    how does it decide when to discard them? It's unsound to expect
+    the application to call some function to say 'OK, you can free
+    everything now'.
+
+    It's possible that the spec intends "browsers" to be able to
+    determine which resources inherit headers from which others. This
+    section of the spec does say:
+
+      The browser MUST store these inherited and implied request
+      headers with the cached resource.
+
+    so perhaps Chromium's client implementation really does expose the
+    stream IDs and associated stream IDs to the application. I'll have
+    to check.
+
+    - Ah! In section 3.3.1, it says that the server can push a
+      resource only if the associated-to stream ID is for "an existing
+      open stream." So on the client, the associated-to stream will
+      not yet be closed. OK, that makes sense.
+
+    - all pushed streams need to be created before their associated-to
+      stream is closed, but they can close after the associated
+      stream. I think that, as long as header inheritance happens in
+      the framing layer immediately after the receipt of the
+      SYN_STREAM for a pushed resource, then we can still discard the
+      headers and data for the associated-to stream when both these
+      conditions are met:
+
+      a. the server has sent the FIN flag for the stream, closing it,
+         AND
+
+      b. either the application has retrieved all the headers and data
+         for the stream, or some timeout has expired. The timeout
+         would be necessary only if we provided an asynchronous API,
+         where the application requested a resource in one API call,
+         but then had to make a separate API call to consume the
+         result of the request.
+
+- if the client knows that a resource is being pushed, and it receives
+  a request from the application for that resource, it must not send a
+  SYN_STREAM requesting the resource. Instead, it must make the
+  received headers and data available to the application.
+
+- a client can cancel a particular server push stream by issuing a
+  stream error with error code CANCEL for that server push stream
+
+- a client can cancel a stream and all its associated server push
+  streams by issuing a stream error with error code CANCEL for the
+  original stream. The server must stop sending frames for the
+  original stream and for all server push streams whose associated-to
+  stream is the original stream.
+
