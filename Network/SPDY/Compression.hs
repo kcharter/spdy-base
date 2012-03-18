@@ -1,11 +1,14 @@
 module Network.SPDY.Compression (compressionDictionary,
+                                 defaultSPDYWindowBits,
+                                 WindowBits(..),
                                  Inflate,
                                  decompress,
                                  Deflate,
                                  compress) where
 
 import Blaze.ByteString.Builder
-import Codec.Zlib (Inflate, withInflateInput, flushInflate,
+import Codec.Zlib (WindowBits(..),
+                   Inflate, withInflateInput, flushInflate,
                    Deflate, withDeflateInput, flushDeflate)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -195,6 +198,9 @@ compressionDictionary =
      0x31, 0x2c, 0x75, 0x74, 0x66, 0x2d, 0x2c, 0x2a,
      0x2c, 0x65, 0x6e, 0x71, 0x3d, 0x30, 0x2e
    ]
+
+defaultSPDYWindowBits :: WindowBits
+defaultSPDYWindowBits = WindowBits 11
 
 compress :: Deflate -> ByteString -> IO Builder
 compress deflate bs =

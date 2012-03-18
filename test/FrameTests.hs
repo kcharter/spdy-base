@@ -7,8 +7,7 @@ import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
 import Test.QuickCheck.Property (morallyDubiousIOProperty)
 import Codec.Zlib (initDeflateWithDictionary,
-                   initInflateWithDictionary,
-                   defaultWindowBits)
+                   initInflateWithDictionary)
 
 import Network.SPDY.Compression
 import Network.SPDY.Deserialize
@@ -36,13 +35,13 @@ prop_toRawFrameAndBack frame =
 
 toRawFrame' :: Frame -> IO RawFrame
 toRawFrame' frame = do
-  deflate <- initDeflateWithDictionary defaultCompressionLevel compressionDictionary defaultWindowBits
+  deflate <- initDeflateWithDictionary defaultCompressionLevel compressionDictionary defaultSPDYWindowBits
   toRawFrame deflate frame
 
 
 toFrame' :: RawFrame -> IO (Either String Frame)
 toFrame' rawFrame = do
-  inflate <- initInflateWithDictionary defaultWindowBits compressionDictionary
+  inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
   toFrame inflate rawFrame
 
 defaultCompressionLevel :: Int
