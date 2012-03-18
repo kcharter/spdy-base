@@ -19,13 +19,20 @@ milestones occur, like receiving headers or body bytes for the
 request, or sending data in the response.
 
 What is interesting about these timeouts is that they involve mutable
-state, but use plain old IORefs and the function
-'atomicallyModifyIORef' instead of using MVars. Michael Snoyman
-explains this choice in the article "Warp: A Haskell Web Server" in
-the May/June 2011 issue of IEEE Internet Computing. He says that they
-found that the locking overhead of MVars imposed a noticeable
-performance penalty.
+state, but use plain old IORefs and the function 'atomicModifyIORef'
+instead of using MVars. Michael Snoyman explains this choice in the
+article "Warp: A Haskell Web Server" in the May/June 2011 issue of
+IEEE Internet Computing. He says that they found that the locking
+overhead of MVars imposed a noticeable performance penalty.
 
 So it looks like it might be a good idea to do something similar
 here. The mutable state within a SPDY client is going to have to be
 quite a bit more involved I think, but perhaps the same lessons apply.
+
+Note on 'atomicModifyIORef'
+---------------------------
+
+The API documentation for 'atomicModifyIORef' says that this operation
+is indeed safe for using IORefs in multi-threaded programs. So,
+depending on the consistency requirements, IORefs could be a
+lighter-weight alternative to MVars.
