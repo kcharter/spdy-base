@@ -408,7 +408,7 @@ newtype SettingValue = SettingValue Word32 deriving (Eq, Show, Read)
 -- ID. When the server initiates a ping, it must use an even-numbered
 -- ID. This scheme avoids accidental looping on pings, where each side
 -- initiates an identical ping at the same time.
-newtype PingID = PingID Word32 deriving (Eq, Show, Read)
+newtype PingID = PingID Word32 deriving (Eq, Ord, Show, Read)
 
 
 -- | The reasons for receiving a 'GoAway' frame.
