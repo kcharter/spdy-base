@@ -28,7 +28,8 @@ Library
                        Network.SPDY.Flags,
                        Network.SPDY.Frames,
                        Network.SPDY.Deserialize,
-                       Network.SPDY.Serialize
+                       Network.SPDY.Serialize,
+                       Network.SPDY.Client
   Other-modules:       Network.SPDY.Internal.Deserialize,
                        Network.SPDY.Internal.Serialize,
                        Network.SPDY.Internal.ToWord8
@@ -36,7 +37,10 @@ Library
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
                        bytestring >= 0.9 && < 0.10,
+                       containers >= 0.4 && < 1,
                        mtl >= 2.0 && < 3,
+                       network >= 2.3 && < 3,
+                       time >= 1.2 && < 2,
                        zlib-bindings >= 0.0.3 && < 0.1
   GHC-Options:         -W
 
@@ -55,7 +59,10 @@ Test-Suite tests
                         base >= 3 && < 5,
                         blaze-builder >= 0.3 && < 1,
                         bytestring >= 0.9 && < 0.10,
+                        containers >= 0.4 && < 1,
                         mtl >= 2.0 && < 3,
+                        network >= 2.3 && < 3,
+                        time >= 1.2 && < 2,
                         zlib-bindings >= 0.0.3 && < 0.1,
                         test-framework >= 0.5 && < 1,
                         test-framework-quickcheck2 >= 0.2 && < 1
