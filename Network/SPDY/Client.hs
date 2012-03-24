@@ -8,6 +8,9 @@ module Network.SPDY.Client (ClientOptions(..),
                             Client,
                             client,
                             ping,
+                            PingOptions(..),
+                            defaultPingOptions,
+                            PingResult(..),
                             ConnectionKey(..),
                             Origin(..),
                             Scheme(..),
@@ -28,6 +31,7 @@ import Data.Tuple (swap)
 import Network (HostName, PortID(..), connectTo)
 import Network.Socket (HostAddress, HostAddress6, PortNumber)
 import System.IO (Handle, hPutStrLn, stderr, hFlush)
+import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
 
 import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
@@ -70,21 +74,47 @@ client opts = do
 -- | Estimates the round-trip time for a connection by measuring the
 -- time to send a SPDY PING frame and receive the response from the
 -- server.
-ping :: Client -> ConnectionKey -> IO Milliseconds
-ping client cKey = do
+ping :: PingOptions -> Client -> ConnectionKey -> IO PingResult
+ping opts client cKey = do
   conn <- getConnection client cKey
   frame <- pingFrame conn
-  startTime <- getCurrentTime
+  let thePingID = pingID $ controlFrameDetails frame
   endTimeMVar <- newEmptyMVar
-  installPingHandler conn (pingID $ controlFrameDetails frame) (getCurrentTime >>= putMVar endTimeMVar)
+  installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
+  startTime <- getCurrentTime
   writeFrame conn frame
   flushConnection conn
-  endTime <- takeMVar endTimeMVar
-  return (fromIntegral $ round $ 1000 * toRational (diffUTCTime endTime startTime))
+  maybe (timeoutMillis startTime) return =<<
+    timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar)
   where pingFrame conn = do
           pingID <- nextPingID conn
           return $ ControlFrame (connSPDYVersion conn) (Ping pingID)
+        timeoutMillis startTime =
+          (PingTimeout . millisSince startTime) `fmap` getCurrentTime
+        responseMillis startTime endTimeMVar =
+          (PingResponse . millisSince startTime) `fmap` takeMVar endTimeMVar
+        millisSince startTime endTime =
+          fromIntegral $ round $ 1000 * toRational (diffUTCTime endTime startTime)
+        micros millis = 1000 * fromIntegral millis
 
+-- | Options for a PING request.
+data PingOptions = PingOptions {
+  pingOptsTimeout :: Milliseconds
+  -- ^ The number of milliseconds to wait for a response from the
+  -- remote end before giving up.
+  } deriving (Show)
+
+-- | The default set of PING options. Includes a timeout of 30 seconds.
+defaultPingOptions :: PingOptions
+defaultPingOptions = PingOptions { pingOptsTimeout = 30000 }
+
+-- | The possible results of a PING request.
+data PingResult =
+  PingResponse Milliseconds |
+  -- ^ The remote end responded in the given number of milliseconds.
+  PingTimeout Milliseconds
+  -- ^ We gave up waiting for the remote end after the given number of milliseconds.
+  deriving (Eq, Show)
 
 -- * Supporting data types
 

@@ -17,7 +17,10 @@ main = do
   putStrLn $ "Pinging SPDY server at " ++ host ++ ":" ++ show port
   replicateM_ (optsIters opts) (doPing c cKey)
   where doPing c cKey =
-          ping c cKey >>= putStrLn . (("round-trip time: " ++) . show)
+          ping defaultPingOptions c cKey >>=
+          (putStrLn . \pr -> case pr of
+              PingResponse t -> "round-trip time: " ++ show t
+              PingTimeout  t -> "timed out after " ++ show t)
 
 getOptions :: IO Options
 getOptions =
