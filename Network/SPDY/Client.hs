@@ -20,6 +20,7 @@ module Network.SPDY.Client (ClientOptions(..),
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, takeMVar, putMVar)
+import Control.Exception (finally)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
@@ -81,11 +82,13 @@ ping opts client cKey = do
   let thePingID = pingID $ controlFrameDetails frame
   endTimeMVar <- newEmptyMVar
   installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
-  startTime <- getCurrentTime
-  writeFrame conn frame
-  flushConnection conn
-  maybe (timeoutMillis startTime) return =<<
-    timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar)
+  finally
+    (do startTime <- getCurrentTime
+        writeFrame conn frame
+        flushConnection conn
+        maybe (timeoutMillis startTime) return =<<
+          timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar))
+    (removePingHandler conn thePingID)
   where pingFrame conn = do
           pingID <- nextPingID conn
           return $ ControlFrame (connSPDYVersion conn) (Ping pingID)
