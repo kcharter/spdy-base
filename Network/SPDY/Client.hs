@@ -254,8 +254,12 @@ readFrames conn = readFrames' B.empty
               logErr "Don't know how to handle data frames."
             ControlFrame _ details ->
               case details of
-                Ping pingID ->
+                Ping pingID | isClientInitiated pingID ->
                   removePingHandler conn pingID >>= maybe (return ()) id
+                Ping _ ->
+                  -- we echo the exact same frame as the response
+                  queueFrame conn ASAP frame >>
+                  queueFlush conn ASAP
                 _ ->
                   logErr "Don't know how to handle control frames other than pings"
         -- TODO: the connection (or client) needs a logger; we

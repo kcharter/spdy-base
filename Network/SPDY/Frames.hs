@@ -410,6 +410,13 @@ newtype SettingValue = SettingValue Word32 deriving (Eq, Show, Read)
 -- initiates an identical ping at the same time.
 newtype PingID = PingID Word32 deriving (Eq, Ord, Show, Read)
 
+-- | Determines whether a ping ID is for a server-initiated ping.
+isServerInitiated :: PingID -> Bool
+isServerInitiated (PingID id) = even id
+
+-- | Determines whether a ping ID is for a client-initiated ping.
+isClientInitiated :: PingID -> Bool
+isClientInitiated (PingID id) = odd id
 
 -- | The reasons for receiving a 'GoAway' frame.
 data GoAwayStatus =
