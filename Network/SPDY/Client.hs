@@ -24,7 +24,7 @@ import Control.Exception (finally)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
-import Data.IORef (IORef, newIORef, atomicModifyIORef)
+import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.String (IsString)
 import Data.Time (getCurrentTime, diffUTCTime)
@@ -159,6 +159,9 @@ data Connection =
                -- ^ The version of the protocol on this connection.
                connNextPingIDRef :: IORef PingID,
                -- ^ The next ping ID to use when sending a ping.
+               connLastAcceptedStreamID :: IORef StreamID,
+               -- ^ The last stream ID for which this endpoint sent a
+               -- SYN_REPLY or RST_STREAM.
                connSocketHandle :: Handle,
                -- ^ The handle for the network connection.
                connDeflate :: Deflate,
@@ -199,12 +202,14 @@ setupConnection cKey =
   let (hn, p) = toConnectParams cKey
   in do h <- connectTo hn p
         pingIDRef <- newIORef (PingID 1)
+        streamIDRef <- newIORef (StreamID 0)
         pingHandlersRef <- newIORef (DM.empty)
         inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
         deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
         outgoing <- PC.newChan
         let conn = Connection { connSPDYVersion = spdyVersion3,
                                 connNextPingIDRef = pingIDRef,
+                                connLastAcceptedStreamID = streamIDRef,
                                 connSocketHandle = h,
                                 connInflate = inflate,
                                 connDeflate = deflate,
@@ -222,6 +227,12 @@ pingFrame :: Connection -> IO Frame
 pingFrame conn =
   (controlFrame conn . Ping) `fmap` nextPingID conn
 
+-- | Creates a GO_AWAY frame for this connection, with a given status.
+goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
+goAwayFrame conn goAwayStatus = do
+  lastStreamID <- getLastAcceptedStreamID conn
+  return $ controlFrame conn $ GoAway lastStreamID goAwayStatus
+
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrameDetails -> Frame
 controlFrame conn = ControlFrame (connSPDYVersion conn)
@@ -233,6 +244,15 @@ nextPingID :: Connection -> IO PingID
 nextPingID conn =
   atomicModifyIORef (connNextPingIDRef conn) incPingID
     where incPingID id@(PingID p) = (PingID (p + 2), id)
+
+-- | Gets the last accepted stream ID recorded on a connection.
+getLastAcceptedStreamID :: Connection -> IO StreamID
+getLastAcceptedStreamID = readIORef . connLastAcceptedStreamID
+
+-- | Changes the last accepted stream ID recorded on a connection.
+setLastAcceptedStreamID :: Connection -> StreamID -> IO ()
+setLastAcceptedStreamID conn streamID =
+  atomicModifyIORef (connLastAcceptedStreamID conn) (const (streamID, ()))
 
 -- | Read frames from the server, updating the connection state as the
 -- frames are received.
@@ -314,8 +334,20 @@ doOutgoingJobs conn = go
             WriteFrame frame ->
               serializeFrame conn frame >>=
               hPut (connSocketHandle conn) >>
+              checkForStreamAcks conn frame >>
               go
             Flush ->
               hFlush (connSocketHandle conn) >> go
             Stop action ->
               action
+        checkForStreamAcks conn frame =
+          case frame of
+            ControlFrame _ details ->
+              case details of
+                SynReply _ streamID _ ->
+                  setLastAcceptedStreamID conn streamID
+                RstStream streamID _ ->
+                  setLastAcceptedStreamID conn streamID
+                _ -> return ()
+            DataFrame _ _ _ ->
+              return ()
