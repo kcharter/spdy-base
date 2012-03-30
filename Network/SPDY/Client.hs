@@ -40,6 +40,8 @@ import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- this module in Network.SPDY
 import Network.SPDY.Frames
 import Network.SPDY.Compression
+import Network.SPDY.Internal.PriorityChan (PriorityChan)
+import qualified Network.SPDY.Internal.PriorityChan as PC
 import Network.SPDY.Deserialize
 import Network.SPDY.Serialize
 
@@ -84,8 +86,8 @@ ping opts client cKey = do
   installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
   finally
     (do startTime <- getCurrentTime
-        writeFrame conn frame
-        flushConnection conn
+        queueFrame conn ASAP frame
+        queueFlush conn ASAP
         maybe (timeoutMillis startTime) return =<<
           timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar))
     (removePingHandler conn thePingID)
@@ -166,6 +168,8 @@ data Connection =
                -- ^ The zlib deflation (compression) context.
                connInflate :: Inflate,
                -- ^ The zlib inflation (decompression) context.
+               connOutgoing :: PriorityChan OutgoingPriority OutgoingJob,
+               -- ^ The priority channel used to hold out-going frames.
                connPingHandlers :: IORef (DM.Map PingID (IO ()))
                -- ^ Callbacks registered for PING frames expected from the server.
              }
@@ -201,16 +205,19 @@ setupConnection cKey =
         pingHandlersRef <- newIORef (DM.empty)
         inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
         deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
+        outgoing <- PC.newChan
         let conn = Connection { connSPDYVersion = spdyVersion3,
                                 connNextPingIDRef = pingIDRef,
                                 connSocketHandle = h,
                                 connInflate = inflate,
                                 connDeflate = deflate,
+                                connOutgoing = outgoing,
                                 connPingHandlers = pingHandlersRef }
-        -- TODO: record the thread ID in an IORef in the connection,
+        -- TODO: record the thread IDs in an IORef in the connection,
         -- so we can forcibly terminate the reading thread should it
         -- be necessary
         forkIO (readFrames conn)
+        forkIO (doOutgoingJobs conn)
         return conn
 
 -- | Allocate the next ping ID for a connection. Note that ping IDs
@@ -221,13 +228,48 @@ nextPingID conn =
   atomicModifyIORef (connNextPingIDRef conn) incPingID
     where incPingID id@(PingID p) = (PingID (p + 2), id)
 
--- | Write a frame to the server on the network connection.
-writeFrame :: Connection -> Frame -> IO ()
-writeFrame conn frame =
-  serializeFrame conn frame >>= hPut (connSocketHandle conn)
+-- | Priorities for jobs submitted to the outgoing channel.
+data OutgoingPriority =
+  ASAP |
+  -- ^ Perform the job as soon as possible, ahead of normal stream priority.
+  StreamPriority Priority
+  -- ^ Perform the job with a given stream priority.
+  deriving (Eq, Ord, Show)
 
-flushConnection :: Connection -> IO ()
-flushConnection = hFlush . connSocketHandle
+-- | Jobs submitted on the outgoing queue.
+data OutgoingJob =
+  WriteFrame Frame |
+  -- ^ Write a frame on the network connection to the remote endpoint.
+  Flush |
+  -- ^ Flush the network connection to the remote endpoint.
+  Stop
+  -- ^ Stop processing job.
+  deriving (Show)
+
+-- | Queue a frame for writing to the remote host.
+queueFrame :: Connection -> OutgoingPriority -> Frame -> IO ()
+queueFrame conn prio frame =
+  PC.send prio (WriteFrame frame) (connOutgoing conn)
+
+-- | Queue a flush of the outgoing network connection.
+queueFlush :: Connection -> OutgoingPriority -> IO ()
+queueFlush conn prio =
+  PC.send prio Flush (connOutgoing conn)
+
+-- | Perform outgoing jobs, mostly writing frames and flushing the
+-- outgoing network connection.
+doOutgoingJobs :: Connection -> IO ()
+doOutgoingJobs conn = go
+  where go = PC.receive (connOutgoing conn) >>= \job ->
+          case job of
+            WriteFrame frame ->
+              serializeFrame conn frame >>=
+              hPut (connSocketHandle conn) >>
+              go
+            Flush ->
+              hFlush (connSocketHandle conn) >> go
+            Stop ->
+              return ()
 
 -- | Read frames from the server, updating the connection state as the
 -- frames are received.
