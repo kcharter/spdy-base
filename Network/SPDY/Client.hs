@@ -286,19 +286,24 @@ data OutgoingJob =
   -- ^ Write a frame on the network connection to the remote endpoint.
   Flush |
   -- ^ Flush the network connection to the remote endpoint.
-  Stop
-  -- ^ Stop processing job.
-  deriving (Show)
+  Stop (IO ())
+  -- ^ Stop processing jobs, and perform the given cleanup action.
 
 -- | Queue a frame for writing to the remote host.
 queueFrame :: Connection -> OutgoingPriority -> Frame -> IO ()
-queueFrame conn prio frame =
-  PC.send prio (WriteFrame frame) (connOutgoing conn)
+queueFrame conn prio = queueOutgoingJob conn prio . WriteFrame
 
 -- | Queue a flush of the outgoing network connection.
 queueFlush :: Connection -> OutgoingPriority -> IO ()
-queueFlush conn prio =
-  PC.send prio Flush (connOutgoing conn)
+queueFlush conn prio = queueOutgoingJob conn prio Flush
+
+-- | Queue a stop signal for the outgoing job thread.
+queueStop :: Connection -> OutgoingPriority -> IO () -> IO ()
+queueStop conn prio = queueOutgoingJob conn prio . Stop
+
+queueOutgoingJob :: Connection -> OutgoingPriority -> OutgoingJob -> IO ()
+queueOutgoingJob conn prio job =
+  PC.send prio job (connOutgoing conn)
 
 -- | Perform outgoing jobs, mostly writing frames and flushing the
 -- outgoing network connection.
@@ -312,5 +317,5 @@ doOutgoingJobs conn = go
               go
             Flush ->
               hFlush (connSocketHandle conn) >> go
-            Stop ->
-              return ()
+            Stop action ->
+              action
