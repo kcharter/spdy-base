@@ -91,10 +91,7 @@ ping opts client cKey = do
         maybe (timeoutMillis startTime) return =<<
           timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar))
     (removePingHandler conn thePingID)
-  where pingFrame conn = do
-          pingID <- nextPingID conn
-          return $ ControlFrame (connSPDYVersion conn) (Ping pingID)
-        timeoutMillis startTime =
+  where timeoutMillis startTime =
           (PingTimeout . millisSince startTime) `fmap` getCurrentTime
         responseMillis startTime endTimeMVar =
           (PingResponse . millisSince startTime) `fmap` takeMVar endTimeMVar
@@ -219,6 +216,15 @@ setupConnection cKey =
         forkIO (readFrames conn)
         forkIO (doOutgoingJobs conn)
         return conn
+
+-- | Creates a client-initiated PING frame for this connection.
+pingFrame :: Connection -> IO Frame
+pingFrame conn =
+  (controlFrame conn . Ping) `fmap` nextPingID conn
+
+-- | Creates a control frame with the correct protocol version for this connection.
+controlFrame :: Connection -> ControlFrameDetails -> Frame
+controlFrame conn = ControlFrame (connSPDYVersion conn)
 
 -- | Allocate the next ping ID for a connection. Note that ping IDs
 -- are allowed to wrap, so we don't need to worry about numeric
