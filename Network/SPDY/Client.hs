@@ -228,6 +228,40 @@ nextPingID conn =
   atomicModifyIORef (connNextPingIDRef conn) incPingID
     where incPingID id@(PingID p) = (PingID (p + 2), id)
 
+-- | Read frames from the server, updating the connection state as the
+-- frames are received.
+readFrames :: Connection -> IO ()
+readFrames conn = readFrames' B.empty
+  where readFrames' bytes = do
+          (errOrFrame, bytes') <- readAFrame bytes
+          either handleError handleFrame errOrFrame
+          readFrames' bytes'
+        readAFrame bytes = readAFrame' (parse parseRawFrame bytes)
+        readAFrame' (Fail bytes _ msg) = return (Left msg, bytes)
+        readAFrame' (Partial continue) =
+          hGetSome (connSocketHandle conn) 4096 >>= (readAFrame' . continue)
+        readAFrame' (Done bytes rawFrame) = do
+          errOrFrame <- toFrame (connInflate conn) rawFrame
+          either (\msg -> return (Left msg, bytes)) (\frame -> return (Right frame, bytes)) errOrFrame
+        -- TODO: if there is an error reading frames, there isn't
+        -- really a graceful way to recover. This thread should
+        -- stop, and the connection should be torn down.
+        handleError = error . ("error reading frames: " ++)
+        handleFrame frame = do
+          logErr $ "read frame:\n" ++ show frame
+          case frame of
+            DataFrame _ _ _ ->
+              logErr "Don't know how to handle data frames."
+            ControlFrame _ details ->
+              case details of
+                Ping pingID ->
+                  removePingHandler conn pingID >>= maybe (return ()) id
+                _ ->
+                  logErr "Don't know how to handle control frames other than pings"
+        -- TODO: the connection (or client) needs a logger; we
+        -- shouldn't just print to stderr
+        logErr = hPutStrLn stderr
+
 -- | Priorities for jobs submitted to the outgoing channel.
 data OutgoingPriority =
   ASAP |
@@ -270,37 +304,3 @@ doOutgoingJobs conn = go
               hFlush (connSocketHandle conn) >> go
             Stop ->
               return ()
-
--- | Read frames from the server, updating the connection state as the
--- frames are received.
-readFrames :: Connection -> IO ()
-readFrames conn = readFrames' B.empty
-  where readFrames' bytes = do
-          (errOrFrame, bytes') <- readAFrame bytes
-          either handleError handleFrame errOrFrame
-          readFrames' bytes'
-        readAFrame bytes = readAFrame' (parse parseRawFrame bytes)
-        readAFrame' (Fail bytes _ msg) = return (Left msg, bytes)
-        readAFrame' (Partial continue) =
-          hGetSome (connSocketHandle conn) 4096 >>= (readAFrame' . continue)
-        readAFrame' (Done bytes rawFrame) = do
-          errOrFrame <- toFrame (connInflate conn) rawFrame
-          either (\msg -> return (Left msg, bytes)) (\frame -> return (Right frame, bytes)) errOrFrame
-        -- TODO: if there is an error reading frames, there isn't
-        -- really a graceful way to recover. This thread should
-        -- stop, and the connection should be torn down.
-        handleError = error . ("error reading frames: " ++)
-        handleFrame frame = do
-          logErr $ "read frame:\n" ++ show frame
-          case frame of
-            DataFrame _ _ _ ->
-              logErr "Don't know how to handle data frames."
-            ControlFrame _ details ->
-              case details of
-                Ping pingID ->
-                  removePingHandler conn pingID >>= maybe (return ()) id
-                _ ->
-                  logErr "Don't know how to handle control frames other than pings"
-        -- TODO: the connection (or client) needs a logger; we
-        -- shouldn't just print to stderr
-        logErr = hPutStrLn stderr
