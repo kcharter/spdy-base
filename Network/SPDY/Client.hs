@@ -27,11 +27,11 @@ import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.String (IsString)
-import Data.Time (getCurrentTime, diffUTCTime)
+import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
 import Network (HostName, PortID(..), connectTo)
 import Network.Socket (HostAddress, HostAddress6, PortNumber)
-import System.IO (Handle, hPutStrLn, stderr, hFlush)
+import System.IO (Handle, hPutStrLn, stderr, hFlush, hClose)
 import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
 
@@ -155,10 +155,17 @@ newtype Milliseconds = Milliseconds Int deriving (Eq, Ord, Show, Num, Real, Enum
 
 -- | State associated with a single connection.
 data Connection =
-  Connection { connSPDYVersion :: SPDYVersion,
+  Connection { connClient :: Client,
+               -- ^ The client in which this connection is registered.
+               connKeys :: IORef [ConnectionKey],
+               -- ^ The list of connection keys under which this
+               -- connection is registered.
+               connSPDYVersion :: SPDYVersion,
                -- ^ The version of the protocol on this connection.
                connNextPingIDRef :: IORef PingID,
                -- ^ The next ping ID to use when sending a ping.
+               connLifeCycleState :: IORef ConnectionLifeCycleState,
+               -- ^ The current stage of this connection's life cycle.
                connLastAcceptedStreamID :: IORef StreamID,
                -- ^ The last stream ID for which this endpoint sent a
                -- SYN_REPLY or RST_STREAM.
@@ -173,6 +180,30 @@ data Connection =
                connPingHandlers :: IORef (DM.Map PingID (IO ()))
                -- ^ Callbacks registered for PING frames expected from the server.
              }
+
+-- | The state of activity on a connection.
+data ConnectionLifeCycleState =
+  Open UTCTime |
+  -- ^ The connection is active. The time is either the time the
+  -- connection was established, or the last time we sent or received
+  -- a frame.
+  Closing |
+  -- ^ The connection is being closed. A GOAWAY frame is being
+  -- assembled and sent.
+  Closed
+  -- ^ The connection is now closed. A GOAWAY frame, if applicable, has been sent.
+  deriving (Eq, Show)
+
+-- | Update the time of last activity on a connection, provided the
+-- connection is still active.
+touch :: Connection -> IO ()
+touch conn = do
+  now <- getCurrentTime
+  atomicModifyIORef (connLifeCycleState conn) $ \s ->
+    (case s of
+        Open _ -> Open now
+        _ -> s,
+     ())
 
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
 installPingHandler conn pingID handler =
@@ -193,22 +224,28 @@ getConnection client cKey = do
   modifyMVar (connectionMapMVar client) $ \cm ->
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
-              c <- setupConnection cKey
+              c <- setupConnection client cKey
               return (DM.insert cKey c cm, c)
 
 -- | Establishes a connection for a given connection key.
-setupConnection :: ConnectionKey -> IO Connection
-setupConnection cKey =
+setupConnection :: Client -> ConnectionKey -> IO Connection
+setupConnection client cKey =
   let (hn, p) = toConnectParams cKey
   in do h <- connectTo hn p
+        keysRef <- newIORef [cKey]
+        now <- getCurrentTime
+        lifeCycleStateRef <- newIORef (Open now)
         pingIDRef <- newIORef (PingID 1)
         streamIDRef <- newIORef (StreamID 0)
         pingHandlersRef <- newIORef (DM.empty)
         inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
         deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
         outgoing <- PC.newChan
-        let conn = Connection { connSPDYVersion = spdyVersion3,
+        let conn = Connection { connClient = client,
+                                connKeys = keysRef,
+                                connSPDYVersion = spdyVersion3,
                                 connNextPingIDRef = pingIDRef,
+                                connLifeCycleState = lifeCycleStateRef,
                                 connLastAcceptedStreamID = streamIDRef,
                                 connSocketHandle = h,
                                 connInflate = inflate,
@@ -221,6 +258,29 @@ setupConnection cKey =
         forkIO (readFrames conn)
         forkIO (doOutgoingJobs conn)
         return conn
+
+-- | Cleanly shuts down a connection. If given a 'GoAwayStatus', sends
+-- the corresponding GOAWAY frame to the remote endpoint.
+closeConnection :: Connection -> Maybe GoAwayStatus -> IO ()
+closeConnection conn maybeGoAwayStatus = do
+  oldStatus <- atomicModifyIORef (connLifeCycleState conn) $ \s ->
+    case s of
+      Open _  -> (Closing, s)
+      _ -> (s, s)
+  case oldStatus of
+    Open _ -> do
+      modifyMVar (connectionMapMVar $ connClient conn) removeMe
+      maybe
+        (return ())
+        ((queueFrame conn ASAP =<<) . goAwayFrame conn)
+        maybeGoAwayStatus
+      queueStop conn ASAP $ do
+        atomicModifyIORef (connLifeCycleState conn) (const (Closed, ()))
+        hClose (connSocketHandle conn)
+    _ -> return ()
+  where removeMe m = do
+          keys <- readIORef (connKeys conn)
+          return (foldr DM.delete m keys, ())
 
 -- | Creates a client-initiated PING frame for this connection.
 pingFrame :: Connection -> IO Frame
@@ -260,8 +320,8 @@ readFrames :: Connection -> IO ()
 readFrames conn = readFrames' B.empty
   where readFrames' bytes = do
           (errOrFrame, bytes') <- readAFrame bytes
-          either handleError handleFrame errOrFrame
-          readFrames' bytes'
+          touch conn
+          either handleError (\f -> handleFrame f >> readFrames' bytes') errOrFrame
         readAFrame bytes = readAFrame' (parse parseRawFrame bytes)
         readAFrame' (Fail bytes _ msg) = return (Left msg, bytes)
         readAFrame' (Partial continue) =
@@ -269,10 +329,13 @@ readFrames conn = readFrames' B.empty
         readAFrame' (Done bytes rawFrame) = do
           errOrFrame <- toFrame (connInflate conn) rawFrame
           either (\msg -> return (Left msg, bytes)) (\frame -> return (Right frame, bytes)) errOrFrame
-        -- TODO: if there is an error reading frames, there isn't
-        -- really a graceful way to recover. This thread should
-        -- stop, and the connection should be torn down.
-        handleError = error . ("error reading frames: " ++)
+        handleError msg = do
+          logErr $ "error reading frames: " ++ msg
+          readIORef (connLifeCycleState conn) >>= \s ->
+            case s of
+              Open _ -> logErr "closing connection with a protocol error" >>
+                        closeConnection conn (Just GoAwayProtocolError)
+              _ -> return ()
         handleFrame frame = do
           logErr $ "read frame:\n" ++ show frame
           case frame of
@@ -334,6 +397,7 @@ doOutgoingJobs conn = go
             WriteFrame frame ->
               serializeFrame conn frame >>=
               hPut (connSocketHandle conn) >>
+              touch conn >>
               checkForStreamAcks conn frame >>
               go
             Flush ->
