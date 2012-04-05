@@ -11,6 +11,7 @@ module Network.SPDY.Client (ClientOptions(..),
                             PingOptions(..),
                             defaultPingOptions,
                             PingResult(..),
+                            initiateStream,
                             ConnectionKey(..),
                             Origin(..),
                             Scheme(..),
@@ -24,6 +25,7 @@ import Control.Exception (finally)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
+import Data.Enumerator (Enumerator, Iteratee)
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.String (IsString)
@@ -117,6 +119,26 @@ data PingResult =
   PingTimeout Milliseconds
   -- ^ We gave up waiting for the remote end after the given number of milliseconds.
   deriving (Eq, Show)
+
+-- | Initiate a stream.
+initiateStream :: Maybe Priority
+                  -- ^ The priority for the stream. 'Nothing'
+                  -- indicates the default priority.
+                  -> [(HeaderName, HeaderValue)]
+                  -- ^ The list of headers to send.
+                  -> Enumerator ByteString IO ()
+                  -- ^ A possible empty supply of byte strings to send
+                  -- to the remote endpoint.
+                  -> Iteratee (HeaderName, HeaderValue) IO ()
+                  -- ^ The consumer of headers that arrive from the
+                  -- remote endpoint.
+                  -> Iteratee ByteString IO ()
+                  -- ^ The consumer of bytes that arrive from the
+                  -- remote endpoint.
+                  -> IO StreamID
+                  -- ^ The ID for the initiated stream.
+initiateStream maybePriority headers dataProducer headerConsumer dataConsumer =
+  error "ni"
 
 -- * Supporting data types
 
