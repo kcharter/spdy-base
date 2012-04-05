@@ -41,6 +41,7 @@ import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
                                    -- this module in Network.SPDY
 import Network.SPDY.Error
+import Network.SPDY.Flags (Flags)
 import Network.SPDY.Frames
 import Network.SPDY.Compression
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
@@ -319,6 +320,25 @@ goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
 goAwayFrame conn goAwayStatus = do
   lastStreamID <- getLastAcceptedStreamID conn
   return $ controlFrame conn $ GoAway lastStreamID goAwayStatus
+
+-- | Creates a SYN_STREAM frame, used to initiate a new stream.
+synStreamFrame :: Connection
+                  -> Flags SynStreamFlag
+                  -> Maybe StreamID
+                  -> Maybe Priority
+                  -> Maybe Slot
+                  -> [(HeaderName, HeaderValue)]
+                  -> IO Frame
+synStreamFrame conn flags maybeAssocSID maybePriority maybeSlot headers = do
+  streamID <- nextStreamID conn
+  return $ controlFrame conn $ SynStream
+    flags streamID maybeAssocSID
+    (maybe defaultPriority id maybePriority)
+    (maybe noSlot id maybeSlot)
+    (HeaderBlock headers)
+
+defaultPriority :: Priority
+defaultPriority = Priority 4
 
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrameDetails -> Frame

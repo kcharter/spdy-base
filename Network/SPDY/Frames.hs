@@ -289,6 +289,10 @@ instance Ord Priority where
 -- position. This is used only in a @SYN_STREAM@ frame.
 newtype Slot = Slot Word8 deriving (Eq, Show, Read)
 
+-- | The zero slot, for convenience.
+noSlot :: Slot
+noSlot = Slot 0
+
 -- | Yet another position in a server's credential vector, but for use
 -- in a @CREDENTIAL@ frame. Yes, in the draft of SPDY 3, the slot
 -- fields really are different sizes in the two frames. In effect,
