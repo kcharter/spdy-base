@@ -21,7 +21,7 @@ module Network.SPDY.Client (ClientOptions(..),
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, takeMVar, putMVar)
-import Control.Exception (finally)
+import Control.Exception (finally, throw)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
@@ -40,6 +40,7 @@ import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
 import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
                                    -- this module in Network.SPDY
+import Network.SPDY.Error
 import Network.SPDY.Frames
 import Network.SPDY.Compression
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
@@ -186,6 +187,8 @@ data Connection =
                -- ^ The version of the protocol on this connection.
                connNextPingIDRef :: IORef PingID,
                -- ^ The next ping ID to use when sending a ping.
+               connNextStreamIDRef :: IORef StreamID,
+               -- ^ The next stream ID to use when initiating a stream.
                connLifeCycleState :: IORef ConnectionLifeCycleState,
                -- ^ The current stage of this connection's life cycle.
                connLastAcceptedStreamID :: IORef StreamID,
@@ -258,7 +261,8 @@ setupConnection client cKey =
         now <- getCurrentTime
         lifeCycleStateRef <- newIORef (Open now)
         pingIDRef <- newIORef (PingID 1)
-        streamIDRef <- newIORef (StreamID 0)
+        nextStreamIDRef <- newIORef (StreamID 1)
+        lastStreamIDRef <- newIORef (StreamID 0)
         pingHandlersRef <- newIORef (DM.empty)
         inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
         deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
@@ -267,8 +271,9 @@ setupConnection client cKey =
                                 connKeys = keysRef,
                                 connSPDYVersion = spdyVersion3,
                                 connNextPingIDRef = pingIDRef,
+                                connNextStreamIDRef = nextStreamIDRef,
                                 connLifeCycleState = lifeCycleStateRef,
-                                connLastAcceptedStreamID = streamIDRef,
+                                connLastAcceptedStreamID = lastStreamIDRef,
                                 connSocketHandle = h,
                                 connInflate = inflate,
                                 connDeflate = deflate,
@@ -326,6 +331,15 @@ nextPingID :: Connection -> IO PingID
 nextPingID conn =
   atomicModifyIORef (connNextPingIDRef conn) incPingID
     where incPingID id@(PingID p) = (PingID (p + 2), id)
+
+-- | Allocate the next stream ID for a connection. Stream IDs are not
+-- allowed to wrap, so this function can fail with a 'OutOfStreamIDs'
+-- error.
+nextStreamID :: Connection -> IO StreamID
+nextStreamID conn =
+  atomicModifyIORef (connNextStreamIDRef conn) incStreamID
+    where incStreamID id@(StreamID s) | s < maxBound = (StreamID (s + 2), id)
+                                      | otherwise = throw OutOfStreamIDs
 
 -- | Gets the last accepted stream ID recorded on a connection.
 getLastAcceptedStreamID :: Connection -> IO StreamID
