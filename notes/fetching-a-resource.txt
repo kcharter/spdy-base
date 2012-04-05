@@ -1,0 +1,52 @@
+In order to fetch a resource from the flip server, we'll need:
+
+1. to send a SYN_STREAM with the necessary headers to idenitify the
+   resource. At the moment, we can make it the application's job to
+   insert the correct headers. According to section 3.2.1 of the spec,
+   the required headers are:
+
+   - ':method', with the HTTP method as the value, in this case 'GET'
+
+   - ':path', whose value is the path part of the intended URL, with a
+     '/' prepended
+
+   - ':version', whose value is the HTTP version string. For example,
+     in this case it would be 'HTTP/1.1'
+
+   - ':host', the host and port portion of the url,
+     e.g. '127.0.0.1:10041' for our sample flip server
+
+   - ':scheme', the scheme portion of the URL, in this case 'http' or
+     'https' (I don't think there is a 'spdy' scheme so 'https' might
+     still be OK even though we're not yet using TLS)
+
+2. Be able to handle the resulting SYN_REPLY, HEADERS and DATA frames,
+   by taking two actions:
+
+   - storing headers received in some kind of data structure
+     associated with the stream ID
+
+   - storing bytes received in DATA frames in some kind of data
+     structure associated with the stream ID
+
+3. Make the headers and the data available to the application. Since
+   additional headers can arrive at any time, it probably makes sense
+   to keep the headers and the response body separate from one
+   another.
+
+   - one straightforward way to do this is for the application to give
+     call-back functions that process headers or data chunks as they
+     become available.
+
+   - another, somewhat higher-level approach, would be for the
+     application to supply iteratees that process a stream of headers
+     and a stream of byte strings
+
+   The first approach avoids marrying us to iteratees at the outset,
+   so I'll probably stick with that. I'm not sure, but it may
+   facilitate our layering on either iteratees or conduits at some
+   later point.
+
+The flip server does not yet, as far as I can tell, implement SPDY 3
+flow control, so we can start off without worrying about WINDOW_UPDATE
+frames.
