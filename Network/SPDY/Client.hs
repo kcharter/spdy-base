@@ -203,8 +203,9 @@ data Connection =
                -- ^ The zlib inflation (decompression) context.
                connOutgoing :: PriorityChan OutgoingPriority OutgoingJob,
                -- ^ The priority channel used to hold out-going frames.
-               connPingHandlers :: IORef (DM.Map PingID (IO ()))
+               connPingHandlers :: IORef (DM.Map PingID (IO ())),
                -- ^ Callbacks registered for PING frames expected from the server.
+               connStreams :: IORef (DM.Map StreamID Stream)
              }
 
 -- | The state of activity on a connection.
@@ -231,6 +232,26 @@ touch conn = do
         _ -> s,
      ())
 
+-- | State associated with a particular stream.
+data Stream =
+  Stream { ssStreamID :: StreamID
+           -- ^ The stream ID for this stream.
+         , ssPriority :: Priority
+           -- ^ The priority for data frames sent on this stream.
+         , ssDataProducer :: IO (Maybe ByteString)
+           -- ^ An IO action that fetches the next chunk of data to
+           -- send to the server. A result of 'Nothing' indicates that
+           -- there is no more data.
+         , ssHeaderConsumer :: Maybe [(HeaderName, HeaderValue)] -> IO ()
+           -- ^ An IO action that consumes the next batch of headers
+           -- available from the remote endpoint. 'Nothing' signals
+           -- that there are no more headers.
+         , ssDataConsumer :: Maybe ByteString -> IO ()
+           -- ^ An IO action that consumes the next chunk of data
+           -- available from the remote endpoint. 'Nothing' signals
+           -- that there is no more data.
+         }
+
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
 installPingHandler conn pingID handler =
   atomicModifyIORef (connPingHandlers conn) $ \handlerMap ->
@@ -240,6 +261,33 @@ removePingHandler :: Connection -> PingID -> IO (Maybe (IO ()))
 removePingHandler conn pingID =
   atomicModifyIORef (connPingHandlers conn) $
   swap . DM.updateLookupWithKey (const $ const Nothing) pingID
+
+addStream :: Connection
+             -> StreamID
+             -> Priority
+             -> IO (Maybe ByteString)
+             -> (Maybe [(HeaderName, HeaderValue)] -> IO ())
+             -> (Maybe ByteString -> IO ())
+             -> IO ()
+addStream conn sid priority dataProducer headerConsumer dataConsumer =
+  atomicModifyIORef (connStreams conn) $ \sm ->
+  (DM.insert sid (Stream sid priority dataProducer headerConsumer dataConsumer) sm, ())
+
+removeStream :: Connection -> StreamID -> IO ()
+removeStream conn sid =
+  atomicModifyIORef (connStreams conn) $ \sm -> (DM.delete sid sm, ())
+
+receiveHeaders :: Connection -> StreamID -> Maybe [(HeaderName, HeaderValue)] -> IO ()
+receiveHeaders conn sid maybeHeaders =
+  lookupStream conn sid >>= maybe (return ()) (\s -> (ssHeaderConsumer s) maybeHeaders)
+
+receiveData :: Connection -> StreamID -> Maybe ByteString -> IO ()
+receiveData conn sid maybeBytes =
+  lookupStream conn sid >>= maybe (return ()) (\s -> (ssDataConsumer s) maybeBytes)
+
+lookupStream :: Connection -> StreamID -> IO (Maybe Stream)
+lookupStream conn sid =
+  DM.lookup sid `fmap` readIORef (connStreams conn)
 
 serializeFrame :: Connection -> Frame -> IO ByteString
 serializeFrame conn = frameToByteString (connDeflate conn)
@@ -264,7 +312,8 @@ setupConnection client cKey =
         pingIDRef <- newIORef (PingID 1)
         nextStreamIDRef <- newIORef (StreamID 1)
         lastStreamIDRef <- newIORef (StreamID 0)
-        pingHandlersRef <- newIORef (DM.empty)
+        pingHandlersRef <- newIORef DM.empty
+        streamsRef <- newIORef DM.empty
         inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
         deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
         outgoing <- PC.newChan
@@ -279,7 +328,8 @@ setupConnection client cKey =
                                 connInflate = inflate,
                                 connDeflate = deflate,
                                 connOutgoing = outgoing,
-                                connPingHandlers = pingHandlersRef }
+                                connPingHandlers = pingHandlersRef,
+                                connStreams = streamsRef }
         -- TODO: record the thread IDs in an IORef in the connection,
         -- so we can forcibly terminate the reading thread should it
         -- be necessary

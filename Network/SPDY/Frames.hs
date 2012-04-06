@@ -272,7 +272,7 @@ newtype DataLength =
 
 -- | Identifies a stream within a SPDY connection. Only 31 bits are
 -- used.
-newtype StreamID = StreamID Word32 deriving (Eq, Show, Read)
+newtype StreamID = StreamID Word32 deriving (Eq, Ord, Show, Read)
 
 -- | Extracts the raw stream ID word from a 'StreamID'.
 rawStreamID :: StreamID -> Word32
