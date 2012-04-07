@@ -22,11 +22,13 @@ module Network.SPDY.Client (ClientOptions(..),
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, takeMVar, putMVar)
 import Control.Exception (finally, throw)
+import Control.Monad (when)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
+import Data.Maybe (isNothing)
 import Data.String (IsString)
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
@@ -40,7 +42,7 @@ import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
                                    -- this module in Network.SPDY
 import Network.SPDY.Error
-import Network.SPDY.Flags (Flags)
+import Network.SPDY.Flags (Flags, packFlags, allClear, isSet)
 import Network.SPDY.Frames
 import Network.SPDY.Compression
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
@@ -122,7 +124,11 @@ data PingResult =
   deriving (Eq, Show)
 
 -- | Initiate a stream.
-initiateStream :: Maybe Priority
+initiateStream :: Client
+                  -- ^ The client on which to initiate the stream.
+                  -> ConnectionKey
+                  -- ^ Identifies the connection on which to initiate the stream.
+                  -> Maybe Priority
                   -- ^ The priority for the stream. 'Nothing'
                   -- indicates the default priority.
                   -> [(HeaderName, HeaderValue)]
@@ -141,8 +147,20 @@ initiateStream :: Maybe Priority
                   -- there is no more data.
                   -> IO StreamID
                   -- ^ The ID for the initiated stream.
-initiateStream maybePriority headers dataProducer headerConsumer dataConsumer =
-  error "ni"
+initiateStream client cKey maybePriority headers dataProducer headerConsumer dataConsumer = do
+  conn <- getConnection client cKey
+  maybeData <- dataProducer
+  let halfClosed = isNothing maybeData
+      flags = packFlags (if halfClosed then [SynStreamFlagFin] else [])
+  initFrame <- synStreamFrame conn flags Nothing maybePriority Nothing headers
+  let sid = newStreamID $ controlFrameDetails initFrame
+      prio = priority $ controlFrameDetails initFrame
+  addStream conn sid prio dataProducer headerConsumer dataConsumer
+  let sprio = StreamPriority prio
+  queueFrame conn sprio initFrame
+  maybe (return ()) (queueFrame conn sprio . (DataFrame sid allClear)) maybeData
+  queueFlush conn sprio
+  return sid
 
 -- * Supporting data types
 
@@ -447,8 +465,13 @@ readFrames conn = readFrames' B.empty
         handleFrame frame = do
           logErr $ "read frame:\n" ++ show frame
           case frame of
-            DataFrame _ _ _ ->
-              logErr "Don't know how to handle data frames."
+            DataFrame sid flags bytes ->
+              lookupStream conn sid >>=
+              maybe
+              (streamError $ "DATA frame for unknown stream " ++ show sid)
+              (\s -> do
+                  ssDataConsumer s (Just bytes)
+                  when (isSet DataFlagFin flags) (endOfStream s))
             ControlFrame _ details ->
               case details of
                 Ping pingID | isClientInitiated pingID ->
@@ -457,11 +480,35 @@ readFrames conn = readFrames' B.empty
                   -- we echo the exact same frame as the response
                   queueFrame conn ASAP frame >>
                   queueFlush conn ASAP
+                SynReply flags sid (HeaderBlock headers) ->
+                  lookupStream conn sid >>=
+                  maybe
+                  (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
+                  (\s -> do
+                      ssHeaderConsumer s (Just headers)
+                      when (isSet SynReplyFlagFin flags) (endOfStream s))
+                Headers flags sid (HeaderBlock headers) ->
+                  lookupStream conn sid >>=
+                  maybe
+                  (streamError ("HEADERS for unknown stream ID " ++ show sid))
+                  (\s -> do
+                      ssHeaderConsumer s (Just headers)
+                      when (isSet HeadersFlagFin flags) (endOfStream s))
                 _ ->
                   logErr "Don't know how to handle control frames other than pings"
         -- TODO: the connection (or client) needs a logger; we
         -- shouldn't just print to stderr
         logErr = hPutStrLn stderr
+        endOfStream s = do
+          ssHeaderConsumer s Nothing
+          ssDataConsumer s Nothing
+          -- TODO: in order to tell whether the stream is really
+          -- finished, we need to know whether the stream is closed
+          -- from our side or not.
+          removeStream conn (ssStreamID s)
+        streamError msg =
+          logErr msg
+          -- TODO: I think we're supposed to send a GOAWAY and clean up
 
 -- | Priorities for jobs submitted to the outgoing channel.
 data OutgoingPriority =
