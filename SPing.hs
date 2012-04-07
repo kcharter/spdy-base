@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main where
+module SPing where
 
 import Control.Monad (replicateM_)
 import Network (PortNumber)
