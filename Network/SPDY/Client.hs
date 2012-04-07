@@ -25,7 +25,6 @@ import Control.Exception (finally, throw)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString, hPut, hGetSome)
 import qualified Data.ByteString as B
-import Data.Enumerator (Enumerator, Iteratee)
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.String (IsString)
@@ -128,15 +127,18 @@ initiateStream :: Maybe Priority
                   -- indicates the default priority.
                   -> [(HeaderName, HeaderValue)]
                   -- ^ The list of headers to send.
-                  -> Enumerator ByteString IO ()
-                  -- ^ A possible empty supply of byte strings to send
-                  -- to the remote endpoint.
-                  -> Iteratee (HeaderName, HeaderValue) IO ()
-                  -- ^ The consumer of headers that arrive from the
-                  -- remote endpoint.
-                  -> Iteratee ByteString IO ()
-                  -- ^ The consumer of bytes that arrive from the
-                  -- remote endpoint.
+                  -> IO (Maybe ByteString)
+                  -- ^ An action that retrieves the next chunk of data
+                  -- to send to the remote endpoint. 'Nothing'
+                  -- indicates no more data.
+                  -> (Maybe [(HeaderName, HeaderValue)] -> IO ())
+                  -- ^ An action that consumes headers that arrive
+                  -- from the remote endpoint. 'Nothing' indicates
+                  -- that there are no more headers.
+                  -> (Maybe ByteString -> IO ())
+                  -- ^ An action that consumes bytes that arrive from
+                  -- the remote endpoint. 'Nothing' indicates that
+                  -- there is no more data.
                   -> IO StreamID
                   -- ^ The ID for the initiated stream.
 initiateStream maybePriority headers dataProducer headerConsumer dataConsumer =
