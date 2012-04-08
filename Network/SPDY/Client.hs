@@ -297,14 +297,6 @@ removeStream :: Connection -> StreamID -> IO ()
 removeStream conn sid =
   atomicModifyIORef (connStreams conn) $ \sm -> (DM.delete sid sm, ())
 
-receiveHeaders :: Connection -> StreamID -> Maybe [(HeaderName, HeaderValue)] -> IO ()
-receiveHeaders conn sid maybeHeaders =
-  lookupStream conn sid >>= maybe (return ()) (\s -> (ssHeaderConsumer s) maybeHeaders)
-
-receiveData :: Connection -> StreamID -> Maybe ByteString -> IO ()
-receiveData conn sid maybeBytes =
-  lookupStream conn sid >>= maybe (return ()) (\s -> (ssDataConsumer s) maybeBytes)
-
 lookupStream :: Connection -> StreamID -> IO (Maybe Stream)
 lookupStream conn sid =
   DM.lookup sid `fmap` readIORef (connStreams conn)
