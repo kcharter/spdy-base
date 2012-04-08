@@ -7,7 +7,7 @@ import qualified Data.ByteString as B
 import Data.String (fromString)
 import Network (PortNumber)
 import System.Environment (getArgs)
-import System.IO (hFlush, stdout)
+import System.IO (hFlush, stdout, stderr, BufferMode(..), hSetBuffering)
 
 import Network.SPDY.Client
 import Network.SPDY.Frames (HeaderName(..), HeaderValue(..))
@@ -20,6 +20,12 @@ main = do
       port = optsPort opts
       file = optsFileName opts
   putStrLn $ "Downloading '" ++ file ++ "' from SPDY server at " ++ host ++ ":" ++ show port
+  -- We're using stdout for output and stderr for frame logging, so we
+  -- want to make sure that we're using block buffering on both. This
+  -- makes a huge difference.
+  let bufferMode = BlockBuffering (Just 4096)
+  hSetBuffering stdout bufferMode
+  hSetBuffering stderr bufferMode
   doDownload c host port file
   where doDownload c host port file = do
           doneHeaders <- newEmptyMVar
