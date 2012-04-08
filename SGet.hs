@@ -10,7 +10,7 @@ import System.Environment (getArgs)
 import System.IO (hFlush, stdout, stderr, BufferMode(..), hSetBuffering)
 
 import Network.SPDY.Client
-import Network.SPDY.Frames (HeaderName(..), HeaderValue(..), DeltaWindowSize(..))
+import Network.SPDY.Frames (HeaderName(..), HeaderValue(..))
 
 main :: IO ()
 main = do
@@ -52,9 +52,9 @@ main = do
                 where printHeader (HeaderName name, HeaderValue value) =
                         B.putStr name >> putStr " = " >> B.putStr value >> putStr "\r\n"
               consumeData Nothing =
-                putMVar doneData () >> return (DeltaWindowSize 0)
+                putMVar doneData () >> return 0
               consumeData (Just bytes) =
-                B.putStr bytes >> return (DeltaWindowSize $ fromIntegral $ B.length bytes)
+                B.putStr bytes >> return (fromIntegral $ B.length bytes)
           sid <- initiateStream c cKey Nothing headers (return Nothing) consumeHeaders consumeData
           putStrLn $ "Initiated stream " ++ show sid
           hFlush stdout

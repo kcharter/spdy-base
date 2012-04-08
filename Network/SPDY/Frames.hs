@@ -447,7 +447,9 @@ instance Flag HeadersFlag where
 
 -- | The number of bytes now free in the sender's data transfer
 -- window.
-newtype DeltaWindowSize = DeltaWindowSize Word32 deriving (Eq, Show, Read)
+newtype DeltaWindowSize =
+  DeltaWindowSize Word32
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Show, Read)
 
 -- | A cryptographic proof that the client has the necessary private
 -- key. The format is a TLS digitally-signed element. See the spec for
