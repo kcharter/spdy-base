@@ -4,9 +4,10 @@ module SPing where
 
 import Control.Monad (replicateM_)
 import Network (PortNumber)
-import Network.SPDY.Client
 import System.Environment (getArgs)
 import System.IO (hSetBuffering, BufferMode(..), stdout, stderr)
+
+import Network.SPDY.Client
 
 main :: IO ()
 main = do
