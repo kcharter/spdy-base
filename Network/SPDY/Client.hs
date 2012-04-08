@@ -141,7 +141,7 @@ initiateStream :: Client
                   -- ^ An action that consumes headers that arrive
                   -- from the remote endpoint. 'Nothing' indicates
                   -- that there are no more headers.
-                  -> (Maybe ByteString -> IO ())
+                  -> (Maybe ByteString -> IO DeltaWindowSize)
                   -- ^ An action that consumes bytes that arrive from
                   -- the remote endpoint. 'Nothing' indicates that
                   -- there is no more data.
@@ -266,10 +266,14 @@ data Stream =
            -- ^ An IO action that consumes the next batch of headers
            -- available from the remote endpoint. 'Nothing' signals
            -- that there are no more headers.
-         , ssDataConsumer :: Maybe ByteString -> IO ()
+         , ssDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
            -- ^ An IO action that consumes the next chunk of data
            -- available from the remote endpoint. 'Nothing' signals
-           -- that there is no more data.
+           -- that there is no more data. The result is the number of
+           -- bytes that are consumed in the operation, and is used in
+           -- flow control. If some or all of a given chunk of data
+           -- must be buffered, the change in window size can be
+           -- smaller than the length of the byte string.
          }
 
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
@@ -287,7 +291,7 @@ addStream :: Connection
              -> Priority
              -> IO (Maybe ByteString)
              -> (Maybe [(HeaderName, HeaderValue)] -> IO ())
-             -> (Maybe ByteString -> IO ())
+             -> (Maybe ByteString -> IO DeltaWindowSize)
              -> IO ()
 addStream conn sid priority dataProducer headerConsumer dataConsumer =
   atomicModifyIORef (connStreams conn) $ \sm ->
@@ -402,6 +406,12 @@ synStreamFrame conn flags maybeAssocSID maybePriority maybeSlot headers = do
 defaultPriority :: Priority
 defaultPriority = Priority 4
 
+-- | Creates a WINDOW_UPDATE frame for this connection and a
+-- particular stream.
+windowUpdateFrame :: Connection -> StreamID -> DeltaWindowSize -> Frame
+windowUpdateFrame conn sid =
+  controlFrame conn . (WindowUpdate sid)
+
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrameDetails -> Frame
 controlFrame conn = ControlFrame (connSPDYVersion conn)
@@ -462,8 +472,12 @@ readFrames conn = readFrames' B.empty
               maybe
               (streamError $ "DATA frame for unknown stream " ++ show sid)
               (\s -> do
-                  ssDataConsumer s (Just bytes)
-                  when (isSet DataFlagFin flags) (endOfStream s))
+                  let isLast = isSet DataFlagFin flags
+                  dws <- ssDataConsumer s (Just bytes)
+                  if isLast then endOfStream s else do
+                    let sprio = (StreamPriority $ ssPriority s)
+                    queueFrame conn sprio (windowUpdateFrame conn sid dws)
+                    queueFlush conn sprio)
             ControlFrame _ details ->
               case details of
                 Ping pingID | isClientInitiated pingID ->
