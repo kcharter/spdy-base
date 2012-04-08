@@ -6,6 +6,7 @@ import Control.Monad (replicateM_)
 import Network (PortNumber)
 import Network.SPDY.Client
 import System.Environment (getArgs)
+import System.IO (hSetBuffering, BufferMode(..), stdout, stderr)
 
 main :: IO ()
 main = do
@@ -14,6 +15,9 @@ main = do
   let host = optsHost opts
       port = optsPort opts
       cKey = OriginKey (Origin "https" (Host host) port)
+  let bufferMode = BlockBuffering (Just 4096)
+  hSetBuffering stdout bufferMode
+  hSetBuffering stderr bufferMode
   putStrLn $ "Pinging SPDY server at " ++ host ++ ":" ++ show port
   replicateM_ (optsIters opts) (doPing c cKey)
   where doPing c cKey =
