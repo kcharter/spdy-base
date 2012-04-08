@@ -474,7 +474,7 @@ readFrames conn = readFrames' B.empty
               (\s -> do
                   let isLast = isSet DataFlagFin flags
                   dws <- ssDataConsumer s (Just bytes)
-                  if isLast then endOfStream s else do
+                  if isLast then endOfStream s else when (dws > 0) $ do
                     let sprio = (StreamPriority $ ssPriority s)
                     queueFrame conn sprio (windowUpdateFrame conn sid dws)
                     queueFlush conn sprio)
