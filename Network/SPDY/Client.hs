@@ -12,6 +12,7 @@ module Network.SPDY.Client (ClientOptions(..),
                             defaultPingOptions,
                             PingResult(..),
                             initiateStream,
+                            updateWindow,
                             ConnectionKey(..),
                             Origin(..),
                             Scheme(..),
@@ -161,6 +162,43 @@ initiateStream client cKey maybePriority headers dataProducer headerConsumer dat
   maybe (return ()) (queueFrame conn sprio . (DataFrame sid allClear)) maybeData
   queueFlush conn sprio
   return sid
+
+-- | Sends a change in the window size for a stream to the remote
+-- endpoint.
+--
+-- This function is intended for situations in which the data consumer
+-- for the stream may report a window size change of zero bytes. In
+-- such cases, it's possible for the remote endpoint to reduce the
+-- window to zero but never be notified when more space becomes
+-- available. If your data consumer always returns a positive change
+-- in window size, then you shouldn't need to use this
+-- function. Otherwise, you may need to use it to notify the remote
+-- endpoint when there is room to accept more data.
+updateWindow :: Client
+                -- ^ The client.
+                -> ConnectionKey
+                -- ^ Identifies which connection within the client.
+                -> StreamID
+                -- ^ Identifies which stream within the connection.
+                -> DeltaWindowSize
+                -- ^ The change in window size, i.e. the number of
+                -- bytes that can now be transmitted by the remote
+                -- endpoint. May be zero, in which case this action
+                -- has no effect.
+                -> IO ()
+updateWindow c cKey sid dws = do
+  conn <- getConnection c cKey
+  lookupStream conn sid >>=
+    (maybe (return ()) $ \s ->
+      updateWindow' conn s dws)
+
+updateWindow' :: Connection -> Stream -> DeltaWindowSize -> IO ()
+updateWindow' conn s dws =
+  when (dws > 0) $ do
+    let sprio = (StreamPriority $ ssPriority s)
+        sid = ssStreamID s
+    queueFrame conn sprio (windowUpdateFrame conn sid dws)
+    queueFlush conn sprio
 
 -- * Supporting data types
 
@@ -474,10 +512,7 @@ readFrames conn = readFrames' B.empty
               (\s -> do
                   let isLast = isSet DataFlagFin flags
                   dws <- ssDataConsumer s (Just bytes)
-                  if isLast then endOfStream s else when (dws > 0) $ do
-                    let sprio = (StreamPriority $ ssPriority s)
-                    queueFrame conn sprio (windowUpdateFrame conn sid dws)
-                    queueFlush conn sprio)
+                  if isLast then endOfStream s else updateWindow' conn s dws)
             ControlFrame _ details ->
               case details of
                 Ping pingID | isClientInitiated pingID ->
