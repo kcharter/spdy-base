@@ -58,7 +58,7 @@ instance Arbitrary DataFlag where
 
 instance Arbitrary ControlFrameDetails where
   arbitrary =
-    oneof [ SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+    oneof [ SynStreamFrame <$> arbitrary
           , SynReply <$> arbitrary <*> arbitrary <*> arbitrary
           , RstStream <$> arbitrary <*> arbitrary
           , Settings <$> arbitrary <*> arbitrary
@@ -67,6 +67,9 @@ instance Arbitrary ControlFrameDetails where
           , Headers <$> arbitrary <*> arbitrary <*> arbitrary
           , WindowUpdate <$> arbitrary <*> arbitrary
           , Credential <$> arbitrary <*> arbitrary <*> arbitrary ]
+
+instance Arbitrary SynStream where
+  arbitrary = SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin

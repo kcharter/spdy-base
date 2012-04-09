@@ -460,7 +460,7 @@ synStreamFrame :: Connection
                   -> IO Frame
 synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
   streamID <- nextStreamID conn
-  return $ controlFrame conn $ SynStream
+  return $ controlFrame conn $ SynStreamFrame $ SynStream
     flags streamID maybeAssocSID
     priority
     (maybe noSlot id maybeSlot)

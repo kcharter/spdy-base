@@ -87,25 +87,7 @@ data Data =
 -- kinds of control frames.
 data ControlFrameDetails =
   -- | Request to create a new stream.
-  SynStream
-  { synStreamFlags :: Flags SynStreamFlag
-    -- ^ Flags for stream creation.
-  , newStreamID :: StreamID
-    -- ^ Uniquely identifies the new stream.
-  , associatedTo :: Maybe StreamID
-    -- ^ Identifies a stream with which this stream is associated. If
-    -- this stream is independent of all others, this must be
-    -- 'Nothing'.
-  , priority :: Priority
-    -- ^ The priority of the new stream.
-  , slot :: Slot
-    -- ^ The index in the server's credential vector of the client
-    -- certificate to be used for this request. A value of zero means
-    -- that no client certificate should be associated with this
-    -- stream.
-  , headerBlock :: HeaderBlock
-    -- ^ A set of headers for the stream.
-  } |
+  SynStreamFrame SynStream |
   -- | Acknowledges receipt of a 'SynStream' frame.
   SynReply
   { synReplyFlags :: Flags SynReplyFlag
@@ -196,6 +178,27 @@ data DataFlag =
 instance Flag DataFlag where
   bit DataFlagFin = 0
   bit DataFlagCompress = 1
+
+data SynStream =
+  SynStream { synStreamFlags :: Flags SynStreamFlag
+              -- ^ Flags for stream creation.
+            , synStreamNewStreamID :: StreamID
+              -- ^ Uniquely identifies the new stream.
+            , synStreamAssociatedTo :: Maybe StreamID
+              -- ^ Identifies a stream with which this stream is
+              -- associated. If this stream is independent of all
+              -- others, this must be 'Nothing'.
+            , synStreamPriority :: Priority
+              -- ^ The priority of the new stream.
+            , synStreamSlot :: Slot
+              -- ^ The index in the server's credential vector of the
+              -- client certificate to be used for this request. A
+              -- value of zero means that no client certificate should
+              -- be associated with this stream.
+            , synStreamHeaderBlock :: HeaderBlock
+              -- ^ A set of headers for the stream.
+            }
+  deriving (Eq, Read, Show)
 
 -- | Flags used in the 'SynStream' frame.
 data SynStreamFlag =
