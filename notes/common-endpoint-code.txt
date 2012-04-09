@@ -1,0 +1,196 @@
+Extracting Common Endpoint Code
+-------------------------------
+
+I've been thinking that it would be a good idea to build a SPDY server
+before I get too much further into the client, mostly because it would
+allow writing automated tests for the interaction between client and
+server, tests which cover things that the flip server currently has no
+support for. Of course, this wouldn't test interoperability with other
+SPDY servers, but to do that I'd really need to support SPDY 2 as well
+as SPDY 3, since there don't seem to be many SPDY 3 implementations
+out there now.
+
+There is actually quite a bit that is common between a SPDY client and
+server. For example, either side can initiate streams, though in the
+server case it's only for server push. No matter which side initiates
+a stream, the flow of headers and data can be in either
+direction. Both sides must maintain a set of connections, and have
+threads that read and respond to incoming frames, and that write
+outgoing frames. So what are the parts that we need to abstract?
+
+1. Connection initiation.
+
+   - Client: connections are initiated either by an API call, or they
+     could be initiated by the first attempt to obtain a resource from
+     a particular origin. I haven't yet implemented the second
+     approach because it requires understanding the contents of
+     headers, and I'd rather keep that understanding in an
+     HTTP-specific layer above the bare-bones SPDY layer.
+
+   - Server: connections are initiated when we accept an incoming
+     network connection on the server's listening port.
+
+   We don't really have a way to accomodate the server style of
+   initiating connections. Currently, our API function for
+   establishing a connection assumes the client mode of operation, and
+   that it must open a network connection as a side-effect. So we will
+   need an API function that can, say, take a handle for the network
+   connection as an argument. The client specialization could call
+   this more general API function to set up a client-side connection.
+
+2. Response to SYN_STREAM frames. We haven't implemented this on the
+   client side yet. However, in order to respond to a SYN_STREAM
+   frame, we need a pluggable function that takes the set of headers
+   from the SYN_STREAM, and either
+
+   - produces an error suitable for encoding in a RST_STREAM frame, or
+
+   - produces
+
+     - a set of headers for inclusion in a RST_REPLY frame
+
+     - a set of flags for inclusion in a RST_REPLY frame
+
+     - a header producer
+
+     - a data producer
+
+     - a header consumer
+
+     - a data consumer
+
+     that is, the better part of the input for an 'initiateStream'
+     operation. When this second alternative results, we would create
+     a Stream in the same way as we would in 'initiateStream', except
+     that we do not send a SYN_STREAM frame, but instead a SYN_REPLY.
+
+   Note that, because of server push, a client must be able to respond
+   to a SYN_STREAM frame in superficially the same way as a
+   server. The difference is that in a client you would always expect
+   the new stream to be a server push stream, and thus related to
+   another stream through an associated stream ID in the SYN_STREAM
+   frame. Further, you would expect all data to be transfered from the
+   server. In fact, you might *insist* on this, though I'll have to
+   check the spec to see whether it's an error for a client to receive
+   a SYN_STREAM in which the associated stream ID is zero.
+
+   In other words, in the client, you would expect the header producer
+   and the data producer to produce nothing, and the header consumer
+   and data consumer to do all the work, likely writing the headers
+   and data into some kind of cache.
+
+   In the server, you would expect the headers in the SYN_STREAM to
+   identify some resource to be fetched, the header producer and data
+   producer to do most of the work, and for the header consumer and
+   data consumer to do relatively little.
+
+   Clearly though, the response to the contents of a SYN_STREAM must
+   be different for clients and servers.
+
+3. Generalization: factoring out the responses to the different types
+   of frames in the frame reader thread.
+
+   We can think of point (2) more generally, and allow the reader
+   thread to be parameterized by a set of response functions, one for
+   each of the different types of frames that could be read on a
+   connection.
+
+   The only annoyance with this is that, because of the way I've
+   defined the frame data types, the signatures of the functions would
+   have to be large, containing arguments for each of the fields in
+   each of the different types of frames. Sadly, this breaks
+   abstraction.
+
+   Perhaps there is a better way to organize the frame types, with
+   different data types for the different kinds of frames, brought
+   together in a bit union. For example, we now have
+
+     data Frame =
+       DataFrame <fields> |
+       ControlFrame SPDYVersion ControlFrameDetails;
+
+     data ControlFrameDetails =
+       SynStream <fields> |
+       SynReply <fields> |
+       ...
+       ;
+
+    The problem is that this leads to a lot of fragile
+    pattern-matching on the different variants of
+    ControlFrameDetails. If we wanted an upper layer to be able to
+    plug in its own function for handling SYN_STREAM frames, we'd need
+    to reproduce the arguments for the 'SynStream' data constructor,
+    which breaks abstraction. If the fields of a SynStream change,
+    we'd need to change the type of the function for responding to
+    SYN_STREAM frames.
+
+    We're forced to have a big ADT for all frame types because they
+    can all be read off a single stream, but perhaps we can organize
+    the types so that we don't have to break abstraction so much, and
+    so that we don't risk calling a field selector that doesn't apply
+    to all variants, which is a potential source of runtime errors
+    that the type checker cannot rule out.
+
+    Another way to organize the types is like so:
+
+      data Frame =
+        DataFrame DataDetails |
+        ControlFrame SPDYVersion ControlDetails;
+
+      data ControlDetails =
+        SynStream SynStreamDetails |
+        SynReply SynReplyDetails |
+        ...
+        Credential CredentialDetails;
+
+       data DataDetails = DataDetails <fields>;
+
+       data SynStreamDetails = SynStreamDetails <fields>;
+       ...
+
+    There are more types to declare, and the refactoring will be a
+    little tedious, but now we have one type per type of frame, so we
+    don't need to reproduce type constructor arguments in a function
+    that hangles SYN_STREAM frames, for example. Further, there is no
+    possibility that we can accidentally use a field name for the
+    wrong kind of frame.
+
+    Another similar possibility is to reproduce the SPDYVersion in
+    each control frame type, and replace the single 'ControlFrame'
+    variant with the full set of variants for control frames:
+
+      data Frame =
+        DataFrame Data |
+        SynStreamFrame SynStream |
+        SynReplyFrame SynReply |
+        ...
+        CredentialFrame Credential;
+
+      data Data = Data <fields>;
+
+      data SynStream = SynStream <fields>;
+
+      ...
+
+      data Credential = Credential <fields>;
+
+    Each of the control frame types would have a common field for the
+    SPDY version. This is a little repetitive. However, if we were to
+    have a record of functions for handling all the different frame
+    types, without the common field we would need to repeat a
+    SPDYVersion argument for each function that handles a control
+    frame type, so the repetition either appears in one place or the
+    other.
+
+4. Handling CREDENTIAL frames.
+
+   A client never has reason to receive a CREDENTIAL frame, since only
+   the server has a credential vector. This variation can be covered
+   by the pluggable responses to frames described in point (3).
+
+5. Handling the persistence of SETTINGS.
+
+   Clients can be asked by servers to persist settings delivered in
+   SETTINGS frames, but servers never persist settings. This variation
+   too can be covered by pluggable responses to frames described in
+   point (3).
