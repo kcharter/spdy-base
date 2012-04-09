@@ -45,17 +45,23 @@ main = do
                          (HeaderName "method", HeaderValue "GET"),
                          (HeaderName "url", HeaderValue $ fromString $ "http://" ++ host ++ ":" ++ show port ++ "/" ++ file),
                          (HeaderName "scheme", HeaderValue "http")]
-              consumeHeaders Nothing =
-                putMVar doneHeaders ()
-              consumeHeaders (Just headers) =
-                mapM_ printHeader headers >> putStr "\r\n"
-                where printHeader (HeaderName name, HeaderValue value) =
-                        B.putStr name >> putStr " = " >> B.putStr value >> putStr "\r\n"
-              consumeData Nothing =
-                putMVar doneData () >> return 0
-              consumeData (Just bytes) =
-                B.putStr bytes >> return (fromIntegral $ B.length bytes)
-          sid <- initiateStream c cKey Nothing headers (return Nothing) consumeHeaders consumeData
+              opts = defaultStreamOptions {
+                streamOptsHeaderConsumer = \maybeHeaders ->
+                 case maybeHeaders of
+                   Nothing ->
+                     putMVar doneHeaders ()
+                   Just headers ->
+                     mapM_ printHeader headers >> putStr "\r\n",
+                streamOptsDataConsumer = \maybeBytes ->
+                  case maybeBytes of
+                    Nothing ->
+                      putMVar doneData () >> return 0
+                    Just bytes ->
+                      B.putStr bytes >> return (fromIntegral $ B.length bytes)
+                }
+              printHeader (HeaderName name, HeaderValue value) =
+                B.putStr name >> putStr " = " >> B.putStr value >> putStr "\r\n"
+          sid <- initiateStream c cKey headers opts
           putStrLn $ "Initiated stream " ++ show sid
           hFlush stdout
           takeMVar doneHeaders

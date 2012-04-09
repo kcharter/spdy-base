@@ -12,6 +12,8 @@ module Network.SPDY.Client (ClientOptions(..),
                             defaultPingOptions,
                             PingResult(..),
                             initiateStream,
+                            StreamOptions(..),
+                            defaultStreamOptions,
                             updateWindow,
                             ConnectionKey(..),
                             Origin(..),
@@ -129,39 +131,56 @@ initiateStream :: Client
                   -- ^ The client on which to initiate the stream.
                   -> ConnectionKey
                   -- ^ Identifies the connection on which to initiate the stream.
-                  -> Maybe Priority
-                  -- ^ The priority for the stream. 'Nothing'
-                  -- indicates the default priority.
                   -> [(HeaderName, HeaderValue)]
                   -- ^ The list of headers to send.
-                  -> IO (Maybe ByteString)
-                  -- ^ An action that retrieves the next chunk of data
-                  -- to send to the remote endpoint. 'Nothing'
-                  -- indicates no more data.
-                  -> (Maybe [(HeaderName, HeaderValue)] -> IO ())
-                  -- ^ An action that consumes headers that arrive
-                  -- from the remote endpoint. 'Nothing' indicates
-                  -- that there are no more headers.
-                  -> (Maybe ByteString -> IO DeltaWindowSize)
-                  -- ^ An action that consumes bytes that arrive from
-                  -- the remote endpoint. 'Nothing' indicates that
-                  -- there is no more data.
+                  -> StreamOptions
+                  -- ^ Other options for the stream, in particular the
+                  -- producers and consumers.
                   -> IO StreamID
                   -- ^ The ID for the initiated stream.
-initiateStream client cKey maybePriority headers dataProducer headerConsumer dataConsumer = do
+initiateStream client cKey headers opts = do
   conn <- getConnection client cKey
-  maybeData <- dataProducer
+  maybeData <- streamOptsDataProducer opts
   let halfClosed = isNothing maybeData
       flags = packFlags (if halfClosed then [SynStreamFlagFin] else [])
-  initFrame <- synStreamFrame conn flags Nothing maybePriority Nothing headers
+      prio = streamOptsPriority opts
+      dataProducer = streamOptsDataProducer opts
+      headerConsumer = streamOptsHeaderConsumer opts
+      dataConsumer = streamOptsDataConsumer opts
+  initFrame <- synStreamFrame conn flags Nothing prio Nothing headers
   let sid = newStreamID $ controlFrameDetails initFrame
-      prio = priority $ controlFrameDetails initFrame
   addStream conn sid prio dataProducer headerConsumer dataConsumer
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
   maybe (return ()) (queueFrame conn sprio . (DataFrame sid allClear)) maybeData
   queueFlush conn sprio
   return sid
+
+-- | Options for initiating streams.
+data StreamOptions = StreamOptions {
+  streamOptsPriority :: Priority,
+  -- ^ The priority for the stream.
+  streamOptsDataProducer :: IO (Maybe ByteString),
+  -- ^ An action that retrieves the next chunk of data to send to the
+  -- remote endpoint. 'Nothing' indicates no more data.
+  streamOptsHeaderConsumer :: Maybe [(HeaderName, HeaderValue)] -> IO (),
+  -- ^ An action that consumes headers that arrive from the remote
+  -- endpoint. 'Nothing' indicates that there are no more headers.
+  streamOptsDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
+  -- ^ An action that consumes bytes that arrive from the remote
+  -- endpoint. 'Nothing' indicates that there is no more data.
+  }
+
+-- | A default set of stream options that includes a medium priority
+-- (4), a data producer that produces no data, and consumers that
+-- simply discard their inputs.
+defaultStreamOptions :: StreamOptions
+defaultStreamOptions = StreamOptions {
+  streamOptsPriority = Priority 4,
+  streamOptsDataProducer = return Nothing,
+  streamOptsHeaderConsumer = const $ return (),
+  streamOptsDataConsumer = return . maybe 0 (fromIntegral . B.length)
+  }
 
 -- | Sends a change in the window size for a stream to the remote
 -- endpoint.
@@ -429,20 +448,17 @@ goAwayFrame conn goAwayStatus = do
 synStreamFrame :: Connection
                   -> Flags SynStreamFlag
                   -> Maybe StreamID
-                  -> Maybe Priority
+                  -> Priority
                   -> Maybe Slot
                   -> [(HeaderName, HeaderValue)]
                   -> IO Frame
-synStreamFrame conn flags maybeAssocSID maybePriority maybeSlot headers = do
+synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
   streamID <- nextStreamID conn
   return $ controlFrame conn $ SynStream
     flags streamID maybeAssocSID
-    (maybe defaultPriority id maybePriority)
+    priority
     (maybe noSlot id maybeSlot)
     (HeaderBlock headers)
-
-defaultPriority :: Priority
-defaultPriority = Priority 4
 
 -- | Creates a WINDOW_UPDATE frame for this connection and a
 -- particular stream.
