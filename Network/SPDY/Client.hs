@@ -168,7 +168,13 @@ data StreamOptions = StreamOptions {
   -- endpoint. 'Nothing' indicates that there are no more headers.
   streamOptsDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
   -- ^ An action that consumes bytes that arrive from the remote
-  -- endpoint. 'Nothing' indicates that there is no more data.
+  -- endpoint. 'Nothing' indicates that there is no more data.  The
+  -- result is the number of bytes that are /consumed/ in the
+  -- operation, and is used in flow control. If some or all of a given
+  -- chunk of data must be buffered pending consumption, the change in
+  -- window size can be smaller than the length of the byte string. If
+  -- this action can return zero, you may need to use 'updateWindow'
+  -- to avoid stalling the stream.
   }
 
 -- | A default set of stream options that includes a medium priority
@@ -189,10 +195,14 @@ defaultStreamOptions = StreamOptions {
 -- for the stream may report a window size change of zero bytes. In
 -- such cases, it's possible for the remote endpoint to reduce the
 -- window to zero but never be notified when more space becomes
--- available. If your data consumer always returns a positive change
--- in window size, then you shouldn't need to use this
--- function. Otherwise, you may need to use it to notify the remote
--- endpoint when there is room to accept more data.
+-- available. If the remote endpoint respects SPDY flow control, it
+-- will stop transferring data on the stream, and the stream will
+-- stall.
+--
+-- If your data consumer always returns a positive change in window
+-- size, then you shouldn't need to use this function. Otherwise, you
+-- may need to use it to notify the remote endpoint when there is room
+-- to accept more data.
 updateWindow :: Client
                 -- ^ The client.
                 -> ConnectionKey
@@ -201,9 +211,9 @@ updateWindow :: Client
                 -- ^ Identifies which stream within the connection.
                 -> DeltaWindowSize
                 -- ^ The change in window size, i.e. the number of
-                -- bytes that can now be transmitted by the remote
-                -- endpoint. May be zero, in which case this action
-                -- has no effect.
+                -- additional bytes that can now be transmitted by the
+                -- remote endpoint. May be zero, in which case this
+                -- action has no effect.
                 -> IO ()
 updateWindow c cKey sid dws = do
   conn <- getConnection c cKey
@@ -326,11 +336,7 @@ data Stream =
          , ssDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
            -- ^ An IO action that consumes the next chunk of data
            -- available from the remote endpoint. 'Nothing' signals
-           -- that there is no more data. The result is the number of
-           -- bytes that are consumed in the operation, and is used in
-           -- flow control. If some or all of a given chunk of data
-           -- must be buffered, the change in window size can be
-           -- smaller than the length of the byte string.
+           -- that there is no more data.
          }
 
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
