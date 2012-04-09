@@ -48,8 +48,8 @@ toRawFrameHeader frame =
   case frame of
     ControlFrame v d ->
       ControlFrameHeader v $ toControlType d
-    DataFrame sid _ _ ->
-      DataFrameHeader sid
+    DataFrame d ->
+      DataFrameHeader (streamID d)
 
 toControlType :: ControlFrameDetails -> Word16
 toControlType details =
@@ -74,7 +74,7 @@ toFlagsByte frame =
         Settings f _ -> toWord8 f
         Headers f _ _ -> toWord8 f
         _ -> 0x0
-    DataFrame _ f _ -> toWord8 f
+    DataFrame d -> toWord8 $ dataFlags d
 
 
 toPayload :: Deflate -> Frame -> IO ByteString
@@ -82,8 +82,8 @@ toPayload deflate frame =
   case frame of
     ControlFrame _ d ->
       toControlPayload deflate d
-    DataFrame _ _ bs ->
-      return bs
+    DataFrame d ->
+      return $ dataBytes d
 
 toControlPayload :: Deflate -> ControlFrameDetails -> IO ByteString
 toControlPayload deflate = fmap toByteString . toControlPayloadBuilder deflate

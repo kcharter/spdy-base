@@ -52,7 +52,7 @@ parseFrame inflate rawFrame =
     ControlFrameHeader v ctype ->
       fmap (ControlFrame v) $ parseControlFrameDetails inflate ctype flags pl
     DataFrameHeader sid ->
-      return $ DataFrame sid (Flags flags) pl
+      return $ DataFrame $ Data sid (Flags flags) pl
     where flags = flagsByte rawFrame
           pl = payload rawFrame
 

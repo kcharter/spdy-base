@@ -44,8 +44,11 @@ instance Arbitrary ByteString where
 
 instance Arbitrary Frame where
   arbitrary =
-    oneof [ DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
+    oneof [ DataFrame <$> arbitrary
           , ControlFrame <$> arbitrary <*> arbitrary ]
+
+instance Arbitrary Data where
+  arbitrary = Data <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance (Flag f, Arbitrary f) => Arbitrary (Flags f) where
   arbitrary = packFlags <$> arbitrary

@@ -152,7 +152,7 @@ initiateStream client cKey headers opts = do
   addStream conn sid prio dataProducer headerConsumer dataConsumer
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
-  maybe (return ()) (queueFrame conn sprio . (DataFrame sid allClear)) maybeData
+  maybe (return ()) (queueFrame conn sprio . DataFrame . (Data sid allClear)) maybeData
   queueFlush conn sprio
   return sid
 
@@ -527,14 +527,17 @@ readFrames conn = readFrames' B.empty
         handleFrame frame = do
           logErr $ "read frame:\n" ++ show frame
           case frame of
-            DataFrame sid flags bytes ->
-              lookupStream conn sid >>=
-              maybe
-              (streamError $ "DATA frame for unknown stream " ++ show sid)
-              (\s -> do
-                  let isLast = isSet DataFlagFin flags
-                  dws <- ssDataConsumer s (Just bytes)
-                  if isLast then endOfStream s else updateWindow' conn s dws)
+            DataFrame d ->
+              let sid = streamID d
+                  flags = dataFlags d
+                  bytes = dataBytes d
+              in lookupStream conn sid >>=
+                 maybe
+                 (streamError $ "DATA frame for unknown stream " ++ show sid)
+                 (\s -> do
+                     let isLast = isSet DataFlagFin flags
+                     dws <- ssDataConsumer s (Just bytes)
+                     if isLast then endOfStream s else updateWindow' conn s dws)
             ControlFrame _ details ->
               case details of
                 Ping pingID | isClientInitiated pingID ->
@@ -631,5 +634,5 @@ doOutgoingJobs conn = go
                 RstStream streamID _ ->
                   setLastAcceptedStreamID conn streamID
                 _ -> return ()
-            DataFrame _ _ _ ->
+            DataFrame _ ->
               return ()

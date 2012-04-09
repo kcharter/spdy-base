@@ -69,14 +69,18 @@ data Frame =
   } |
   -- | A data frame. Data frames carry raw data between a sender and a
   -- receiver.
-  DataFrame
-  { streamID :: StreamID
-    -- ^ Identifies the stream to which the accompanying data belongs.
-  , dataFlags :: Flags DataFlag
-    -- ^ Flags for the data frame.
-  , dataBytes :: ByteString
-    -- ^ The raw data.
-  }
+  DataFrame Data
+  deriving (Eq, Show, Read)
+
+-- | The contents of a DATA frame.
+data Data =
+  Data { streamID :: StreamID
+         -- ^ Identifies the stream to which the accompanying data belongs.
+       , dataFlags :: Flags DataFlag
+         -- ^ Flags for the data frame.
+       , dataBytes :: ByteString
+         -- ^ The raw data.
+       }
   deriving (Eq, Show, Read)
 
 -- | Higher-level representation of the contents of the different
