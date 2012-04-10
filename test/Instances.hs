@@ -66,7 +66,7 @@ instance Arbitrary ControlFrameDetails where
           , GoAwayFrame <$> arbitrary
           , HeadersFrame <$> arbitrary
           , WindowUpdateFrame <$> arbitrary
-          , Credential <$> arbitrary <*> arbitrary <*> arbitrary ]
+          , CredentialFrame <$> arbitrary ]
 
 instance Arbitrary SynStream where
   arbitrary = SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
@@ -183,6 +183,9 @@ instance Arbitrary WindowUpdate where
 
 instance Arbitrary DeltaWindowSize where
   arbitrary = (DeltaWindowSize . fromIntegral) <$> choose (0, 2 ^ 31 - 1 :: Integer)
+
+instance Arbitrary Credential where
+  arbitrary = Credential <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary Slot16 where
   arbitrary = (Slot16 . fromIntegral) <$> choose (0, 2 ^ 16 - 1 :: Int)

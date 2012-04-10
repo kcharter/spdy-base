@@ -82,7 +82,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftWindowUpdate =
       (WindowUpdateFrame . uncurry WindowUpdate) <$> parsePayload parseWindowUpdateContent pl
   | ctype == cftCredential =
-      (\(slot, proof, certs) -> Credential slot proof certs) <$>
+      (\(slot, proof, certs) -> CredentialFrame $ Credential slot proof certs) <$>
       parsePayload parseCredentialContent pl
   | otherwise =
       throwError $ "Illegal SPDY frame type '" ++ show ctype ++ "'"

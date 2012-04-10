@@ -118,14 +118,7 @@ data ControlFrameDetails =
   -- | Asks the server to update a slot in its credential vector for
   -- this connection. The server will overwrite any existing
   -- credential at that slot.
-  Credential
-  { credentialSlot :: Slot16
-    -- ^ The slot in the server's credential vector in which to place the certificate.
-  , credentialProof :: Proof
-    -- ^ Cryptographic proof that the client has the necessary private key.
-  , credentialCertificates :: [Certificate]
-    -- ^ The certificate chain, starting with the leaf certificate.
-  }
+  CredentialFrame Credential
   deriving (Eq, Show, Read)
 
 data DataFlag =
@@ -290,6 +283,17 @@ data WindowUpdate =
   , windowUpdateDeltaWindowSize :: DeltaWindowSize
     -- ^ The additional number of bytes that the sender can transmit
     -- in addition to the remaining window size.
+  }
+  deriving (Eq, Read, Show)
+
+data Credential =
+  Credential
+  { credentialSlot :: Slot16
+    -- ^ The slot in the server's credential vector in which to place the certificate.
+  , credentialProof :: Proof
+    -- ^ Cryptographic proof that the client has the necessary private key.
+  , credentialCertificates :: [Certificate]
+    -- ^ The certificate chain, starting with the leaf certificate.
   }
   deriving (Eq, Read, Show)
 

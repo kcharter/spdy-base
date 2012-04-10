@@ -62,7 +62,7 @@ toControlType details =
     GoAwayFrame _ -> cftGoAway
     HeadersFrame _ -> cftHeaders
     WindowUpdateFrame _ -> cftWindowUpdate
-    Credential _ _ _ -> cftCredential
+    CredentialFrame _ -> cftCredential
 
 toFlagsByte :: Frame -> Word8
 toFlagsByte frame =
@@ -110,8 +110,8 @@ toControlPayloadBuilder deflate details =
       return $ toBuilder (headersStreamID h) `mappend` toBuilder (headersHeaderBlock h)
     WindowUpdateFrame w ->
       return $ toBuilder (windowUpdateStreamID w) `mappend` toBuilder (windowUpdateDeltaWindowSize w)
-    Credential slot proof certs ->
-      return $ toBuilder slot `mappend` toBuilder proof `mappend` toBuilder certs
+    CredentialFrame c ->
+      return $ toBuilder (credentialSlot c) `mappend` toBuilder (credentialProof c) `mappend` toBuilder (credentialCertificates c)
 
 compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder
 compressHeaderBlock deflate hb =
