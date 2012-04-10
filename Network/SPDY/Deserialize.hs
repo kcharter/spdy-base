@@ -50,39 +50,39 @@ parseFrame :: Inflate -> RawFrame -> FrameParser Frame
 parseFrame inflate rawFrame =
   case frameHeader rawFrame of
     ControlFrameHeader v ctype ->
-      fmap (ControlFrame v) $ parseControlFrameDetails inflate ctype flags pl
+      fmap (AControlFrame v) $ parseControlFrame inflate ctype flags pl
     DataFrameHeader sid ->
-      return $ DataFrame $ Data sid (Flags flags) pl
+      return $ ADataFrame $ DataFrame sid (Flags flags) pl
     where flags = flagsByte rawFrame
           pl = payload rawFrame
 
-parseControlFrameDetails :: Inflate -> Word16 -> Word8 -> ByteString
-                            -> FrameParser ControlFrameDetails
-parseControlFrameDetails inflate ctype flags pl
+parseControlFrame :: Inflate -> Word16 -> Word8 -> ByteString
+                     -> FrameParser ControlFrame
+parseControlFrame inflate ctype flags pl
   | ctype == cftSynStream = do
       (sid, asid, pri, slot, compressedHeaders) <- parsePayload parseSynStreamContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
-      return $ SynStreamFrame $ SynStream (Flags flags) sid asid pri slot headerBlock
+      return $ ASynStreamFrame $ SynStreamFrame (Flags flags) sid asid pri slot headerBlock
   | ctype == cftSynReply = do
       (sid, compressedHeaders) <- parsePayload parseSynReplyContent pl
       headerBytes <- toByteString <$> (liftIO $ decompress inflate compressedHeaders)
       headerBlock <- parsePayload parseHeaderBlock headerBytes
-      return $ SynReplyFrame $ SynReply (Flags flags) sid headerBlock
+      return $ ASynReplyFrame $ SynReplyFrame (Flags flags) sid headerBlock
   | ctype == cftRstStream =
-      (RstStreamFrame . uncurry RstStream) <$> parsePayload parseRstStreamContent pl
+      (ARstStreamFrame . uncurry RstStreamFrame) <$> parsePayload parseRstStreamContent pl
   | ctype == cftSettings =
-      (SettingsFrame . Settings (Flags flags)) <$> parsePayload parseSettingPairs pl
+      (ASettingsFrame . SettingsFrame (Flags flags)) <$> parsePayload parseSettingPairs pl
   | ctype == cftPing =
-      (PingFrame . Ping) <$> parsePayload parsePingID pl
+      (APingFrame . PingFrame) <$> parsePayload parsePingID pl
   | ctype == cftGoAway =
-      (GoAwayFrame . uncurry GoAway) <$> parsePayload parseGoAwayContent pl
+      (AGoAwayFrame . uncurry GoAwayFrame) <$> parsePayload parseGoAwayContent pl
   | ctype == cftHeaders =
-      (HeadersFrame . uncurry (Headers (Flags flags))) <$> parsePayload parseHeadersContent pl
+      (AHeadersFrame . uncurry (HeadersFrame (Flags flags))) <$> parsePayload parseHeadersContent pl
   | ctype == cftWindowUpdate =
-      (WindowUpdateFrame . uncurry WindowUpdate) <$> parsePayload parseWindowUpdateContent pl
+      (AWindowUpdateFrame . uncurry WindowUpdateFrame) <$> parsePayload parseWindowUpdateContent pl
   | ctype == cftCredential =
-      (\(slot, proof, certs) -> CredentialFrame $ Credential slot proof certs) <$>
+      (\(slot, proof, certs) -> ACredentialFrame $ CredentialFrame slot proof certs) <$>
       parsePayload parseCredentialContent pl
   | otherwise =
       throwError $ "Illegal SPDY frame type '" ++ show ctype ++ "'"

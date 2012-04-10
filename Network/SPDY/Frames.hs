@@ -62,63 +62,60 @@ data Frame =
   -- | A control frame. Control frames are used for setting up and
   -- tearing down streams, and for exchanging information relevant to
   -- the SPDY protocol itself.
-  ControlFrame
-  { spdyVersion :: SPDYVersion
-    -- ^ The version of the SPDY protocol.
-  , controlFrameDetails :: ControlFrameDetails
-  } |
+  AControlFrame SPDYVersion ControlFrame |
   -- | A data frame. Data frames carry raw data between a sender and a
   -- receiver.
-  DataFrame Data
+  ADataFrame DataFrame
   deriving (Eq, Show, Read)
 
 -- | The contents of a DATA frame.
-data Data =
-  Data { streamID :: StreamID
-         -- ^ Identifies the stream to which the accompanying data belongs.
-       , dataFlags :: Flags DataFlag
-         -- ^ Flags for the data frame.
-       , dataBytes :: ByteString
-         -- ^ The raw data.
-       }
+data DataFrame =
+  DataFrame
+  { streamID :: StreamID
+    -- ^ Identifies the stream to which the accompanying data belongs.
+  , dataFlags :: Flags DataFlag
+    -- ^ Flags for the data frame.
+  , dataBytes :: ByteString
+    -- ^ The raw data.
+  }
   deriving (Eq, Show, Read)
 
 -- | Higher-level representation of the contents of the different
 -- kinds of control frames.
-data ControlFrameDetails =
+data ControlFrame =
   -- | Request to create a new stream.
-  SynStreamFrame SynStream |
+  ASynStreamFrame SynStreamFrame |
   -- | Acknowledges receipt of a 'SynStream' frame.
-  SynReplyFrame SynReply |
+  ASynReplyFrame SynReplyFrame |
   -- | Request to abnormally terminate a stream.
-  RstStreamFrame RstStream |
+  ARstStreamFrame RstStreamFrame |
   -- | Exchange settings, and request or acknowledge that they have
   -- been persisted or cleared.
-  SettingsFrame Settings |
+  ASettingsFrame SettingsFrame |
   -- | Used for estimating the minimum round-trip time from the
   -- sender. Recipients of a 'Ping' frame should send an identical
   -- frame to the sender as soon as possible. If there is other data
   -- waiting to be sent, the 'Ping' frame should take the highest
   -- priority. Each ping sent by sender should have a unique ID.
-  PingFrame Ping |
+  APingFrame PingFrame |
   -- | Tells the remote endpoint to stop using this session. Once
   -- sent, the sender will not initiate any new streams on this
   -- session, and once received the receiver should not send any new
   -- requests on this session. This is intended to allow the orderly
   -- tear-down of a session.
-  GoAwayFrame GoAway |
+  AGoAwayFrame GoAwayFrame |
   -- | Augments an existing stream with additional headers.
-  HeadersFrame Headers |
+  AHeadersFrame HeadersFrame |
   -- | Informs the recipient that there is a (positive) change in the
   -- amount of free space in the sender's data transfer window. This
   -- frame is part of SPDY's approach to flow control. An endpoint's
   -- transfer window is the total capacity that the endpoint has for
   -- buffering raw stream data it receives.
-  WindowUpdateFrame WindowUpdate |
+  AWindowUpdateFrame WindowUpdateFrame |
   -- | Asks the server to update a slot in its credential vector for
   -- this connection. The server will overwrite any existing
   -- credential at that slot.
-  CredentialFrame Credential
+  ACredentialFrame CredentialFrame
   deriving (Eq, Show, Read)
 
 data DataFlag =
@@ -133,8 +130,8 @@ instance Flag DataFlag where
   bit DataFlagFin = 0
   bit DataFlagCompress = 1
 
-data SynStream =
-  SynStream
+data SynStreamFrame =
+  SynStreamFrame
   { synStreamFlags :: Flags SynStreamFlag
     -- ^ Flags for stream creation.
   , synStreamNewStreamID :: StreamID
@@ -168,8 +165,8 @@ instance Flag SynStreamFlag where
   bit SynStreamFlagFin = 0
   bit SynStreamFlagUnidirectional = 1
 
-data SynReply =
-  SynReply
+data SynReplyFrame =
+  SynReplyFrame
   { synReplyFlags :: Flags SynReplyFlag
     -- ^ Flags for the reply.
   , synReplyNewStreamID :: StreamID
@@ -191,8 +188,8 @@ data SynReplyFlag =
 instance Flag SynReplyFlag where
   bit SynReplyFlagFin = 0
 
-data RstStream =
-  RstStream
+data RstStreamFrame =
+  RstStreamFrame
   { rstStreamTermStreamID :: StreamID
     -- ^ Identifies the stream to terminate.
   , rstStreamTermStatus :: TerminationStatus
@@ -242,22 +239,22 @@ data TerminationStatus =
   -- library. This is *not* part of the SPDY spec.
   deriving (Eq, Show, Read)
 
-data Settings =
-  Settings
+data SettingsFrame =
+  SettingsFrame
   { settingsFlags :: Flags SettingsFlag
   , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
   }
   deriving (Eq, Read, Show)
 
-data Ping =
-  Ping
+data PingFrame =
+  PingFrame
   { pingID :: PingID
     -- ^ A unique ID for this ping.
   }
   deriving (Eq, Read, Show)
 
-data GoAway =
-  GoAway
+data GoAwayFrame =
+  GoAwayFrame
   { goAwayLastGoodStreamID :: StreamID
     -- ^ The last stream ID which was accepted by the sender of this
     -- message. If no streams were accepted, must be the zero stream
@@ -267,8 +264,8 @@ data GoAway =
   }
   deriving (Eq, Read, Show)
 
-data Headers =
-  Headers
+data HeadersFrame =
+  HeadersFrame
   { headersFlags :: Flags HeadersFlag
   , headersStreamID :: StreamID
     -- ^ The stream ID of the stream to which the headers apply.
@@ -277,8 +274,8 @@ data Headers =
   }
   deriving (Eq, Read, Show)
 
-data WindowUpdate =
-  WindowUpdate
+data WindowUpdateFrame =
+  WindowUpdateFrame
   { windowUpdateStreamID :: StreamID
     -- ^ The ID of the stream to which this frame applies.
   , windowUpdateDeltaWindowSize :: DeltaWindowSize
@@ -287,8 +284,8 @@ data WindowUpdate =
   }
   deriving (Eq, Read, Show)
 
-data Credential =
-  Credential
+data CredentialFrame =
+  CredentialFrame
   { credentialSlot :: Slot16
     -- ^ The slot in the server's credential vector in which to place the certificate.
   , credentialProof :: Proof

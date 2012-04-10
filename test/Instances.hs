@@ -44,11 +44,11 @@ instance Arbitrary ByteString where
 
 instance Arbitrary Frame where
   arbitrary =
-    oneof [ DataFrame <$> arbitrary
-          , ControlFrame <$> arbitrary <*> arbitrary ]
+    oneof [ ADataFrame <$> arbitrary
+          , AControlFrame <$> arbitrary <*> arbitrary ]
 
-instance Arbitrary Data where
-  arbitrary = Data <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary DataFrame where
+  arbitrary = DataFrame <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance (Flag f, Arbitrary f) => Arbitrary (Flags f) where
   arbitrary = packFlags <$> arbitrary
@@ -56,20 +56,20 @@ instance (Flag f, Arbitrary f) => Arbitrary (Flags f) where
 instance Arbitrary DataFlag where
   arbitrary = oneof [return DataFlagFin, return DataFlagCompress]
 
-instance Arbitrary ControlFrameDetails where
+instance Arbitrary ControlFrame where
   arbitrary =
-    oneof [ SynStreamFrame <$> arbitrary
-          , SynReplyFrame <$> arbitrary
-          , RstStreamFrame <$> arbitrary
-          , SettingsFrame <$> arbitrary
-          , PingFrame <$> arbitrary
-          , GoAwayFrame <$> arbitrary
-          , HeadersFrame <$> arbitrary
-          , WindowUpdateFrame <$> arbitrary
-          , CredentialFrame <$> arbitrary ]
+    oneof [ ASynStreamFrame <$> arbitrary
+          , ASynReplyFrame <$> arbitrary
+          , ARstStreamFrame <$> arbitrary
+          , ASettingsFrame <$> arbitrary
+          , APingFrame <$> arbitrary
+          , AGoAwayFrame <$> arbitrary
+          , AHeadersFrame <$> arbitrary
+          , AWindowUpdateFrame <$> arbitrary
+          , ACredentialFrame <$> arbitrary ]
 
-instance Arbitrary SynStream where
-  arbitrary = SynStream <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary SynStreamFrame where
+  arbitrary = SynStreamFrame <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary SynStreamFlag where
   arbitrary = oneof $ map return [ SynStreamFlagFin
@@ -101,14 +101,14 @@ instance Arbitrary HeaderValue where
 shortBytes :: Gen ByteString
 shortBytes = resize 32 arbitrary
 
-instance Arbitrary SynReply where
-  arbitrary =  SynReply <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary SynReplyFrame where
+  arbitrary =  SynReplyFrame <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary SynReplyFlag where
   arbitrary = return SynReplyFlagFin
 
-instance Arbitrary RstStream where
-  arbitrary = RstStream <$> arbitrary <*> arbitrary
+instance Arbitrary RstStreamFrame where
+  arbitrary = RstStreamFrame <$> arbitrary <*> arbitrary
 
 instance Arbitrary TerminationStatus where
   arbitrary =
@@ -126,8 +126,8 @@ instance Arbitrary TerminationStatus where
                             InvalidCredentials,
                             FrameTooLarge ]
 
-instance Arbitrary Settings where
-  arbitrary = Settings <$> arbitrary <*> arbitrary
+instance Arbitrary SettingsFrame where
+  arbitrary = SettingsFrame <$> arbitrary <*> arbitrary
 
 instance Arbitrary SettingsFlag where
   arbitrary = elements [ SettingsFlagClearSettings ]
@@ -155,14 +155,14 @@ instance Arbitrary SettingID where
 instance Arbitrary SettingValue where
   arbitrary = (SettingValue . fromIntegral) <$> choose (0, 2 ^ 24 - 1 :: Int)
 
-instance Arbitrary Ping where
-  arbitrary = Ping <$> arbitrary
+instance Arbitrary PingFrame where
+  arbitrary = PingFrame <$> arbitrary
 
 instance Arbitrary PingID where
   arbitrary = (PingID . fromIntegral) <$> choose (0, 2 ^ 29 - 1 :: Int)
 
-instance Arbitrary GoAway where
-  arbitrary = GoAway <$> arbitrary <*> arbitrary
+instance Arbitrary GoAwayFrame where
+  arbitrary = GoAwayFrame <$> arbitrary <*> arbitrary
 
 instance Arbitrary GoAwayStatus where
   arbitrary =
@@ -172,20 +172,20 @@ instance Arbitrary GoAwayStatus where
                             GoAwayProtocolError,
                             GoAwayInternalError ]
 
-instance Arbitrary Headers where
-  arbitrary = Headers <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary HeadersFrame where
+  arbitrary = HeadersFrame <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary HeadersFlag where
   arbitrary = return HeadersFlagFin
 
-instance Arbitrary WindowUpdate where
-  arbitrary = WindowUpdate <$> arbitrary <*> arbitrary
+instance Arbitrary WindowUpdateFrame where
+  arbitrary = WindowUpdateFrame <$> arbitrary <*> arbitrary
 
 instance Arbitrary DeltaWindowSize where
   arbitrary = (DeltaWindowSize . fromIntegral) <$> choose (0, 2 ^ 31 - 1 :: Integer)
 
-instance Arbitrary Credential where
-  arbitrary = Credential <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary CredentialFrame where
+  arbitrary = CredentialFrame <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary Slot16 where
   arbitrary = (Slot16 . fromIntegral) <$> choose (0, 2 ^ 16 - 1 :: Int)

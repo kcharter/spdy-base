@@ -46,71 +46,71 @@ rawHeaderBuilder header =
 toRawFrameHeader :: Frame -> RawFrameHeader
 toRawFrameHeader frame =
   case frame of
-    ControlFrame v d ->
-      ControlFrameHeader v $ toControlType d
-    DataFrame d ->
+    AControlFrame v cf ->
+      ControlFrameHeader v $ toControlType cf
+    ADataFrame d ->
       DataFrameHeader (streamID d)
 
-toControlType :: ControlFrameDetails -> Word16
+toControlType :: ControlFrame -> Word16
 toControlType details =
   case details of
-    SynStreamFrame _ -> cftSynStream
-    SynReplyFrame _ -> cftSynReply
-    RstStreamFrame _ -> cftRstStream
-    SettingsFrame _ -> cftSettings
-    PingFrame _ -> cftPing
-    GoAwayFrame _ -> cftGoAway
-    HeadersFrame _ -> cftHeaders
-    WindowUpdateFrame _ -> cftWindowUpdate
-    CredentialFrame _ -> cftCredential
+    ASynStreamFrame _ -> cftSynStream
+    ASynReplyFrame _ -> cftSynReply
+    ARstStreamFrame _ -> cftRstStream
+    ASettingsFrame _ -> cftSettings
+    APingFrame _ -> cftPing
+    AGoAwayFrame _ -> cftGoAway
+    AHeadersFrame _ -> cftHeaders
+    AWindowUpdateFrame _ -> cftWindowUpdate
+    ACredentialFrame _ -> cftCredential
 
 toFlagsByte :: Frame -> Word8
 toFlagsByte frame =
   case frame of
-    ControlFrame _ d ->
-      case d of
-        SynStreamFrame ss -> toWord8 $ synStreamFlags ss
-        SynReplyFrame sr -> toWord8 $ synReplyFlags sr
-        SettingsFrame s -> toWord8 $ settingsFlags s
-        HeadersFrame h -> toWord8 $ headersFlags h
+    AControlFrame _ cf ->
+      case cf of
+        ASynStreamFrame ss -> toWord8 $ synStreamFlags ss
+        ASynReplyFrame sr -> toWord8 $ synReplyFlags sr
+        ASettingsFrame s -> toWord8 $ settingsFlags s
+        AHeadersFrame h -> toWord8 $ headersFlags h
         _ -> 0x0
-    DataFrame d -> toWord8 $ dataFlags d
+    ADataFrame d -> toWord8 $ dataFlags d
 
 
 toPayload :: Deflate -> Frame -> IO ByteString
 toPayload deflate frame =
   case frame of
-    ControlFrame _ d ->
-      toControlPayload deflate d
-    DataFrame d ->
+    AControlFrame _ cf ->
+      toControlPayload deflate cf
+    ADataFrame d ->
       return $ dataBytes d
 
-toControlPayload :: Deflate -> ControlFrameDetails -> IO ByteString
+toControlPayload :: Deflate -> ControlFrame -> IO ByteString
 toControlPayload deflate = fmap toByteString . toControlPayloadBuilder deflate
 
-toControlPayloadBuilder :: Deflate -> ControlFrameDetails -> IO Builder
-toControlPayloadBuilder deflate details =
-  case details of
-    SynStreamFrame ss ->
+toControlPayloadBuilder :: Deflate -> ControlFrame -> IO Builder
+toControlPayloadBuilder deflate cf =
+  case cf of
+    ASynStreamFrame ss ->
       fmap (toBuilder (synStreamNewStreamID ss) `mappend`
             toBuilder (synStreamAssociatedTo ss) `mappend`
             toBuilder (synStreamPriority ss) `mappend`
             toBuilder (synStreamSlot ss) `mappend`) $ compressHeaderBlock deflate $ synStreamHeaderBlock ss
-    SynReplyFrame sr ->
+    ASynReplyFrame sr ->
       fmap (toBuilder (synReplyNewStreamID sr) `mappend`) $ compressHeaderBlock deflate $ synReplyHeaderBlock sr
-    RstStreamFrame rs ->
+    ARstStreamFrame rs ->
       return $ toBuilder (rstStreamTermStreamID rs) `mappend` toBuilder (rstStreamTermStatus rs)
-    SettingsFrame s ->
+    ASettingsFrame s ->
       return $ toBuilder (settingsPairs s)
-    PingFrame p ->
+    APingFrame p ->
       return $ toBuilder (pingID p)
-    GoAwayFrame g ->
+    AGoAwayFrame g ->
       return $ toBuilder (goAwayLastGoodStreamID g) `mappend` toBuilder (goAwayStatus g)
-    HeadersFrame h ->
+    AHeadersFrame h ->
       return $ toBuilder (headersStreamID h) `mappend` toBuilder (headersHeaderBlock h)
-    WindowUpdateFrame w ->
+    AWindowUpdateFrame w ->
       return $ toBuilder (windowUpdateStreamID w) `mappend` toBuilder (windowUpdateDeltaWindowSize w)
-    CredentialFrame c ->
+    ACredentialFrame c ->
       return $ toBuilder (credentialSlot c) `mappend` toBuilder (credentialProof c) `mappend` toBuilder (credentialCertificates c)
 
 compressHeaderBlock :: Deflate -> HeaderBlock -> IO Builder

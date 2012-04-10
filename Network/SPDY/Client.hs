@@ -150,7 +150,7 @@ initiateStream client cKey headers opts = do
   addStream conn sid prio dataProducer headerConsumer dataConsumer
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
-  maybe (return ()) (queueFrame conn sprio . DataFrame . (Data sid allClear)) maybeData
+  maybe (return ()) (queueFrame conn sprio . ADataFrame . (DataFrame sid allClear)) maybeData
   queueFlush conn sprio
   return sid
 
@@ -441,13 +441,13 @@ closeConnection conn maybeGoAwayStatus = do
 pingFrame :: Connection -> IO (PingID, Frame)
 pingFrame conn = do
   id <- nextPingID conn
-  return (id, controlFrame conn $ PingFrame $ Ping id)
+  return (id, controlFrame conn $ APingFrame $ PingFrame id)
 
 -- | Creates a GO_AWAY frame for this connection, with a given status.
 goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
 goAwayFrame conn goAwayStatus = do
   lastStreamID <- getLastAcceptedStreamID conn
-  return $ controlFrame conn $ GoAwayFrame $ GoAway lastStreamID goAwayStatus
+  return $ controlFrame conn $ AGoAwayFrame $ GoAwayFrame lastStreamID goAwayStatus
 
 -- | Creates a SYN_STREAM frame, used to initiate a new stream.
 synStreamFrame :: Connection
@@ -459,7 +459,7 @@ synStreamFrame :: Connection
                   -> IO (StreamID, Frame)
 synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
   streamID <- nextStreamID conn
-  return $ (streamID, controlFrame conn $ SynStreamFrame $ SynStream
+  return $ (streamID, controlFrame conn $ ASynStreamFrame $ SynStreamFrame
                       flags streamID maybeAssocSID
                       priority
                       (maybe noSlot id maybeSlot)
@@ -469,11 +469,11 @@ synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
 -- particular stream.
 windowUpdateFrame :: Connection -> StreamID -> DeltaWindowSize -> Frame
 windowUpdateFrame conn sid =
-  controlFrame conn . WindowUpdateFrame . WindowUpdate sid
+  controlFrame conn . AWindowUpdateFrame . WindowUpdateFrame sid
 
 -- | Creates a control frame with the correct protocol version for this connection.
-controlFrame :: Connection -> ControlFrameDetails -> Frame
-controlFrame conn = ControlFrame (connSPDYVersion conn)
+controlFrame :: Connection -> ControlFrame -> Frame
+controlFrame conn = AControlFrame (connSPDYVersion conn)
 
 -- | Allocate the next ping ID for a connection. Note that ping IDs
 -- are allowed to wrap, so we don't need to worry about numeric
@@ -526,7 +526,7 @@ readFrames conn = readFrames' B.empty
         handleFrame frame = do
           logErr $ "read frame:\n" ++ show frame
           case frame of
-            DataFrame d ->
+            ADataFrame d ->
               let sid = streamID d
                   flags = dataFlags d
                   bytes = dataBytes d
@@ -537,9 +537,9 @@ readFrames conn = readFrames' B.empty
                      let isLast = isSet DataFlagFin flags
                      dws <- ssDataConsumer s (Just bytes)
                      if isLast then endOfStream s else updateWindow' conn s dws)
-            ControlFrame _ details ->
-              case details of
-                PingFrame p ->
+            AControlFrame _ cf ->
+              case cf of
+                APingFrame p ->
                   let thePingID = pingID p
                   in if isClientInitiated thePingID
                      then removePingHandler conn thePingID >>= maybe (return ()) id
@@ -547,7 +547,7 @@ readFrames conn = readFrames' B.empty
                        -- we echo the exact same frame as the response
                        queueFrame conn ASAP frame >>
                        queueFlush conn ASAP
-                SynReplyFrame sr ->
+                ASynReplyFrame sr ->
                   let flags = synReplyFlags sr
                       sid = synReplyNewStreamID sr
                       (HeaderBlock headers) = synReplyHeaderBlock sr
@@ -557,7 +557,7 @@ readFrames conn = readFrames' B.empty
                      (\s -> do
                          ssHeaderConsumer s (Just headers)
                          when (isSet SynReplyFlagFin flags) (endOfStream s))
-                HeadersFrame h ->
+                AHeadersFrame h ->
                   let sid = headersStreamID h
                       flags = headersFlags h
                       (HeaderBlock headers) = headersHeaderBlock h
@@ -634,12 +634,12 @@ doOutgoingJobs conn = go
               action
         checkForStreamAcks conn frame =
           case frame of
-            ControlFrame _ details ->
-              case details of
-                SynReplyFrame sr ->
+            AControlFrame _ cf ->
+              case cf of
+                ASynReplyFrame sr ->
                   setLastAcceptedStreamID conn (synReplyNewStreamID sr)
-                RstStreamFrame rs ->
+                ARstStreamFrame rs ->
                   setLastAcceptedStreamID conn (rstStreamTermStreamID rs)
                 _ -> return ()
-            DataFrame _ ->
+            ADataFrame _ ->
               return ()
