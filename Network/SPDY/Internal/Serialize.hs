@@ -55,7 +55,7 @@ toControlType :: ControlFrameDetails -> Word16
 toControlType details =
   case details of
     SynStreamFrame _ -> cftSynStream
-    SynReply _ _ _ -> cftSynReply
+    SynReplyFrame _ -> cftSynReply
     RstStream _ _ -> cftRstStream
     Settings _ _ -> cftSettings
     Ping _ -> cftPing
@@ -70,7 +70,7 @@ toFlagsByte frame =
     ControlFrame _ d ->
       case d of
         SynStreamFrame ss -> toWord8 $ synStreamFlags ss
-        SynReply f _ _ -> toWord8 f
+        SynReplyFrame sr -> toWord8 $ synReplyFlags sr
         Settings f _ -> toWord8 f
         Headers f _ _ -> toWord8 f
         _ -> 0x0
@@ -95,9 +95,9 @@ toControlPayloadBuilder deflate details =
       fmap (toBuilder (synStreamNewStreamID ss) `mappend`
             toBuilder (synStreamAssociatedTo ss) `mappend`
             toBuilder (synStreamPriority ss) `mappend`
-            toBuilder (synStreamSlot ss) `mappend`) $ compressHeaderBlock deflate (synStreamHeaderBlock ss)
-    SynReply _ sid hb ->
-      fmap (toBuilder sid `mappend`) $ compressHeaderBlock deflate hb
+            toBuilder (synStreamSlot ss) `mappend`) $ compressHeaderBlock deflate $ synStreamHeaderBlock ss
+    SynReplyFrame sr ->
+      fmap (toBuilder (synReplyNewStreamID sr) `mappend`) $ compressHeaderBlock deflate $ synReplyHeaderBlock sr
     RstStream sid status ->
       return $ toBuilder sid `mappend` toBuilder status
     Settings _ pairs ->

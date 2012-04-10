@@ -59,7 +59,7 @@ instance Arbitrary DataFlag where
 instance Arbitrary ControlFrameDetails where
   arbitrary =
     oneof [ SynStreamFrame <$> arbitrary
-          , SynReply <$> arbitrary <*> arbitrary <*> arbitrary
+          , SynReplyFrame <$> arbitrary
           , RstStream <$> arbitrary <*> arbitrary
           , Settings <$> arbitrary <*> arbitrary
           , Ping <$> arbitrary
@@ -100,6 +100,9 @@ instance Arbitrary HeaderValue where
 
 shortBytes :: Gen ByteString
 shortBytes = resize 32 arbitrary
+
+instance Arbitrary SynReply where
+  arbitrary =  SynReply <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary SynReplyFlag where
   arbitrary = return SynReplyFlagFin

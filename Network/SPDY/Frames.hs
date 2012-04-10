@@ -89,16 +89,7 @@ data ControlFrameDetails =
   -- | Request to create a new stream.
   SynStreamFrame SynStream |
   -- | Acknowledges receipt of a 'SynStream' frame.
-  SynReply
-  { synReplyFlags :: Flags SynReplyFlag
-    -- ^ Flags for the reply.
-  , newStreamID :: StreamID
-    -- ^ The same stream ID as in the 'SynStream' frame.
-  , headerBlock :: HeaderBlock
-    -- ^ A set of headers for the stream (unsure whether this is
-    -- supposed to be the exact same set of headers as in the
-    -- 'SynStream' frame).
-  } |
+  SynReplyFrame SynReply |
   -- | Request to abnormally terminate a stream.
   RstStream
   { termStreamID :: StreamID
@@ -212,6 +203,19 @@ data SynStreamFlag =
 instance Flag SynStreamFlag where
   bit SynStreamFlagFin = 0
   bit SynStreamFlagUnidirectional = 1
+
+data SynReply =
+  SynReply
+  { synReplyFlags :: Flags SynReplyFlag
+    -- ^ Flags for the reply.
+  , synReplyNewStreamID :: StreamID
+    -- ^ The same stream ID as in the 'SynStream' frame.
+  , synReplyHeaderBlock :: HeaderBlock
+    -- ^ A set of headers for the stream (unsure whether this is
+    -- supposed to be the exact same set of headers as in the
+    -- 'SynStream' frame).
+  }
+  deriving (Eq, Read, Show)
 
 -- | Flags used in the 'SynReply' frame.
 data SynReplyFlag =

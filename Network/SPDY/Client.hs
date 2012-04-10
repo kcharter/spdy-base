@@ -147,8 +147,7 @@ initiateStream client cKey headers opts = do
       dataProducer = streamOptsDataProducer opts
       headerConsumer = streamOptsHeaderConsumer opts
       dataConsumer = streamOptsDataConsumer opts
-  initFrame <- synStreamFrame conn flags Nothing prio Nothing headers
-  let sid = newStreamID $ controlFrameDetails initFrame
+  (sid, initFrame) <- synStreamFrame conn flags Nothing prio Nothing headers
   addStream conn sid prio dataProducer headerConsumer dataConsumer
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
@@ -457,14 +456,14 @@ synStreamFrame :: Connection
                   -> Priority
                   -> Maybe Slot
                   -> [(HeaderName, HeaderValue)]
-                  -> IO Frame
+                  -> IO (StreamID, Frame)
 synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
   streamID <- nextStreamID conn
-  return $ controlFrame conn $ SynStreamFrame $ SynStream
-    flags streamID maybeAssocSID
-    priority
-    (maybe noSlot id maybeSlot)
-    (HeaderBlock headers)
+  return $ (streamID, controlFrame conn $ SynStreamFrame $ SynStream
+                      flags streamID maybeAssocSID
+                      priority
+                      (maybe noSlot id maybeSlot)
+                      (HeaderBlock headers))
 
 -- | Creates a WINDOW_UPDATE frame for this connection and a
 -- particular stream.
@@ -546,13 +545,16 @@ readFrames conn = readFrames' B.empty
                   -- we echo the exact same frame as the response
                   queueFrame conn ASAP frame >>
                   queueFlush conn ASAP
-                SynReply flags sid (HeaderBlock headers) ->
-                  lookupStream conn sid >>=
-                  maybe
-                  (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
-                  (\s -> do
-                      ssHeaderConsumer s (Just headers)
-                      when (isSet SynReplyFlagFin flags) (endOfStream s))
+                SynReplyFrame sr ->
+                  let flags = synReplyFlags sr
+                      sid = synReplyNewStreamID sr
+                      (HeaderBlock headers) = synReplyHeaderBlock sr
+                  in lookupStream conn sid >>=
+                     maybe
+                     (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
+                     (\s -> do
+                         ssHeaderConsumer s (Just headers)
+                         when (isSet SynReplyFlagFin flags) (endOfStream s))
                 Headers flags sid (HeaderBlock headers) ->
                   lookupStream conn sid >>=
                   maybe
@@ -629,8 +631,8 @@ doOutgoingJobs conn = go
           case frame of
             ControlFrame _ details ->
               case details of
-                SynReply _ streamID _ ->
-                  setLastAcceptedStreamID conn streamID
+                SynReplyFrame sr ->
+                  setLastAcceptedStreamID conn (synReplyNewStreamID sr)
                 RstStream streamID _ ->
                   setLastAcceptedStreamID conn streamID
                 _ -> return ()
