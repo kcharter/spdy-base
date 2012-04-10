@@ -91,12 +91,7 @@ data ControlFrameDetails =
   -- | Acknowledges receipt of a 'SynStream' frame.
   SynReplyFrame SynReply |
   -- | Request to abnormally terminate a stream.
-  RstStream
-  { termStreamID :: StreamID
-    -- ^ Identifies the stream to terminate.
-  , termStatus :: TerminationStatus
-    -- ^ Indicates the reason why the stream is being terminated.
-  } |
+  RstStreamFrame RstStream |
   -- | Exchange settings, and request or acknowledge that they have
   -- been persisted or cleared.
   Settings
@@ -226,6 +221,15 @@ data SynReplyFlag =
 
 instance Flag SynReplyFlag where
   bit SynReplyFlagFin = 0
+
+data RstStream =
+  RstStream
+  { rstStreamTermStreamID :: StreamID
+    -- ^ Identifies the stream to terminate.
+  , rstStreamTermStatus :: TerminationStatus
+    -- ^ Indicates the reason why the stream is being terminated.
+  }
+  deriving (Eq, Read, Show)
 
 -- | The various reasons why a stream could be terminated abnormally
 -- with a 'RstStream' frame.

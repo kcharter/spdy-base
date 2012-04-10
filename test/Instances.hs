@@ -60,7 +60,7 @@ instance Arbitrary ControlFrameDetails where
   arbitrary =
     oneof [ SynStreamFrame <$> arbitrary
           , SynReplyFrame <$> arbitrary
-          , RstStream <$> arbitrary <*> arbitrary
+          , RstStreamFrame <$> arbitrary
           , Settings <$> arbitrary <*> arbitrary
           , Ping <$> arbitrary
           , GoAway <$> arbitrary <*> arbitrary
@@ -106,6 +106,9 @@ instance Arbitrary SynReply where
 
 instance Arbitrary SynReplyFlag where
   arbitrary = return SynReplyFlagFin
+
+instance Arbitrary RstStream where
+  arbitrary = RstStream <$> arbitrary <*> arbitrary
 
 instance Arbitrary TerminationStatus where
   arbitrary =

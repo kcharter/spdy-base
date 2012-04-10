@@ -633,8 +633,8 @@ doOutgoingJobs conn = go
               case details of
                 SynReplyFrame sr ->
                   setLastAcceptedStreamID conn (synReplyNewStreamID sr)
-                RstStream streamID _ ->
-                  setLastAcceptedStreamID conn streamID
+                RstStreamFrame rs ->
+                  setLastAcceptedStreamID conn (rstStreamTermStreamID rs)
                 _ -> return ()
             DataFrame _ ->
               return ()

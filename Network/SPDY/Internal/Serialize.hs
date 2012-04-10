@@ -56,7 +56,7 @@ toControlType details =
   case details of
     SynStreamFrame _ -> cftSynStream
     SynReplyFrame _ -> cftSynReply
-    RstStream _ _ -> cftRstStream
+    RstStreamFrame _ -> cftRstStream
     Settings _ _ -> cftSettings
     Ping _ -> cftPing
     GoAway _ _ -> cftGoAway
@@ -98,8 +98,8 @@ toControlPayloadBuilder deflate details =
             toBuilder (synStreamSlot ss) `mappend`) $ compressHeaderBlock deflate $ synStreamHeaderBlock ss
     SynReplyFrame sr ->
       fmap (toBuilder (synReplyNewStreamID sr) `mappend`) $ compressHeaderBlock deflate $ synReplyHeaderBlock sr
-    RstStream sid status ->
-      return $ toBuilder sid `mappend` toBuilder status
+    RstStreamFrame rs ->
+      return $ toBuilder (rstStreamTermStreamID rs) `mappend` toBuilder (rstStreamTermStatus rs)
     Settings _ pairs ->
       return $ toBuilder pairs
     Ping pid ->
