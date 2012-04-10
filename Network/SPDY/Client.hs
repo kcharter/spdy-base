@@ -469,7 +469,7 @@ synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
 -- particular stream.
 windowUpdateFrame :: Connection -> StreamID -> DeltaWindowSize -> Frame
 windowUpdateFrame conn sid =
-  controlFrame conn . (WindowUpdate sid)
+  controlFrame conn . WindowUpdateFrame . WindowUpdate sid
 
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrameDetails -> Frame

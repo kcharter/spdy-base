@@ -80,7 +80,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftHeaders =
       (HeadersFrame . uncurry (Headers (Flags flags))) <$> parsePayload parseHeadersContent pl
   | ctype == cftWindowUpdate =
-      uncurry WindowUpdate <$> parsePayload parseWindowUpdateContent pl
+      (WindowUpdateFrame . uncurry WindowUpdate) <$> parsePayload parseWindowUpdateContent pl
   | ctype == cftCredential =
       (\(slot, proof, certs) -> Credential slot proof certs) <$>
       parsePayload parseCredentialContent pl

@@ -114,13 +114,7 @@ data ControlFrameDetails =
   -- frame is part of SPDY's approach to flow control. An endpoint's
   -- transfer window is the total capacity that the endpoint has for
   -- buffering raw stream data it receives.
-  WindowUpdate
-  { windowUpdateStreamID :: StreamID
-    -- ^ The ID of the stream to which this frame applies.
-  , windowUpdateDeltaWindowSize :: DeltaWindowSize
-    -- ^ The additional number of bytes that the sender can transmit
-    -- in addition to the remaining window size.
-  } |
+  WindowUpdateFrame WindowUpdate |
   -- | Asks the server to update a slot in its credential vector for
   -- this connection. The server will overwrite any existing
   -- credential at that slot.
@@ -286,6 +280,16 @@ data Headers =
     -- ^ The stream ID of the stream to which the headers apply.
   , headersHeaderBlock :: HeaderBlock
     -- ^ The set of header-value pairs.
+  }
+  deriving (Eq, Read, Show)
+
+data WindowUpdate =
+  WindowUpdate
+  { windowUpdateStreamID :: StreamID
+    -- ^ The ID of the stream to which this frame applies.
+  , windowUpdateDeltaWindowSize :: DeltaWindowSize
+    -- ^ The additional number of bytes that the sender can transmit
+    -- in addition to the remaining window size.
   }
   deriving (Eq, Read, Show)
 

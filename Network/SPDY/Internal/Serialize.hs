@@ -61,7 +61,7 @@ toControlType details =
     PingFrame _ -> cftPing
     GoAwayFrame _ -> cftGoAway
     HeadersFrame _ -> cftHeaders
-    WindowUpdate _ _ -> cftWindowUpdate
+    WindowUpdateFrame _ -> cftWindowUpdate
     Credential _ _ _ -> cftCredential
 
 toFlagsByte :: Frame -> Word8
@@ -108,8 +108,8 @@ toControlPayloadBuilder deflate details =
       return $ toBuilder (goAwayLastGoodStreamID g) `mappend` toBuilder (goAwayStatus g)
     HeadersFrame h ->
       return $ toBuilder (headersStreamID h) `mappend` toBuilder (headersHeaderBlock h)
-    WindowUpdate sid dws ->
-      return $ toBuilder sid `mappend` toBuilder dws
+    WindowUpdateFrame w ->
+      return $ toBuilder (windowUpdateStreamID w) `mappend` toBuilder (windowUpdateDeltaWindowSize w)
     Credential slot proof certs ->
       return $ toBuilder slot `mappend` toBuilder proof `mappend` toBuilder certs
 

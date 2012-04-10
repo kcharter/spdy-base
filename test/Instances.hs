@@ -65,7 +65,7 @@ instance Arbitrary ControlFrameDetails where
           , PingFrame <$> arbitrary
           , GoAwayFrame <$> arbitrary
           , HeadersFrame <$> arbitrary
-          , WindowUpdate <$> arbitrary <*> arbitrary
+          , WindowUpdateFrame <$> arbitrary
           , Credential <$> arbitrary <*> arbitrary <*> arbitrary ]
 
 instance Arbitrary SynStream where
@@ -177,6 +177,9 @@ instance Arbitrary Headers where
 
 instance Arbitrary HeadersFlag where
   arbitrary = return HeadersFlagFin
+
+instance Arbitrary WindowUpdate where
+  arbitrary = WindowUpdate <$> arbitrary <*> arbitrary
 
 instance Arbitrary DeltaWindowSize where
   arbitrary = (DeltaWindowSize . fromIntegral) <$> choose (0, 2 ^ 31 - 1 :: Integer)
