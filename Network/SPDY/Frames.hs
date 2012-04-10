@@ -94,10 +94,7 @@ data ControlFrameDetails =
   RstStreamFrame RstStream |
   -- | Exchange settings, and request or acknowledge that they have
   -- been persisted or cleared.
-  Settings
-  { settingsFlags :: Flags SettingsFlag
-  , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
-  } |
+  SettingsFrame Settings |
   -- | Used for estimating the minimum round-trip time from the
   -- sender. Recipients of a 'Ping' frame should send an identical
   -- frame to the sender as soon as possible. If there is other data
@@ -272,6 +269,13 @@ data TerminationStatus =
   -- ^ Some other termination status, unrecognized by this
   -- library. This is *not* part of the SPDY spec.
   deriving (Eq, Show, Read)
+
+data Settings =
+  Settings
+  { settingsFlags :: Flags SettingsFlag
+  , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
+  }
+  deriving (Eq, Read, Show)
 
 -- | The version of the SPDY protocol. Only 15 bits are used.
 newtype SPDYVersion = SPDYVersion Word16 deriving (Eq, Show, Read)

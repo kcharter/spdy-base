@@ -61,7 +61,7 @@ instance Arbitrary ControlFrameDetails where
     oneof [ SynStreamFrame <$> arbitrary
           , SynReplyFrame <$> arbitrary
           , RstStreamFrame <$> arbitrary
-          , Settings <$> arbitrary <*> arbitrary
+          , SettingsFrame <$> arbitrary
           , Ping <$> arbitrary
           , GoAway <$> arbitrary <*> arbitrary
           , Headers <$> arbitrary <*> arbitrary <*> arbitrary
@@ -125,6 +125,9 @@ instance Arbitrary TerminationStatus where
                             StreamAlreadyClosed,
                             InvalidCredentials,
                             FrameTooLarge ]
+
+instance Arbitrary Settings where
+  arbitrary = Settings <$> arbitrary <*> arbitrary
 
 instance Arbitrary SettingsFlag where
   arbitrary = elements [ SettingsFlagClearSettings ]

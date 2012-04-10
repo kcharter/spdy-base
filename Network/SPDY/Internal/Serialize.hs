@@ -57,7 +57,7 @@ toControlType details =
     SynStreamFrame _ -> cftSynStream
     SynReplyFrame _ -> cftSynReply
     RstStreamFrame _ -> cftRstStream
-    Settings _ _ -> cftSettings
+    SettingsFrame _ -> cftSettings
     Ping _ -> cftPing
     GoAway _ _ -> cftGoAway
     Headers _ _ _ -> cftHeaders
@@ -71,7 +71,7 @@ toFlagsByte frame =
       case d of
         SynStreamFrame ss -> toWord8 $ synStreamFlags ss
         SynReplyFrame sr -> toWord8 $ synReplyFlags sr
-        Settings f _ -> toWord8 f
+        SettingsFrame s -> toWord8 $ settingsFlags s
         Headers f _ _ -> toWord8 f
         _ -> 0x0
     DataFrame d -> toWord8 $ dataFlags d
@@ -100,8 +100,8 @@ toControlPayloadBuilder deflate details =
       fmap (toBuilder (synReplyNewStreamID sr) `mappend`) $ compressHeaderBlock deflate $ synReplyHeaderBlock sr
     RstStreamFrame rs ->
       return $ toBuilder (rstStreamTermStreamID rs) `mappend` toBuilder (rstStreamTermStatus rs)
-    Settings _ pairs ->
-      return $ toBuilder pairs
+    SettingsFrame s ->
+      return $ toBuilder (settingsPairs s)
     Ping pid ->
       return $ toBuilder pid
     GoAway sid status ->

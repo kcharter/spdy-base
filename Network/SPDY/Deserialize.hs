@@ -72,7 +72,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftRstStream =
       (RstStreamFrame . uncurry RstStream) <$> parsePayload parseRstStreamContent pl
   | ctype == cftSettings =
-      Settings (Flags flags) <$> parsePayload parseSettingPairs pl
+      (SettingsFrame . Settings (Flags flags)) <$> parsePayload parseSettingPairs pl
   | ctype == cftPing =
       Ping <$> parsePayload parsePingID pl
   | ctype == cftGoAway =
