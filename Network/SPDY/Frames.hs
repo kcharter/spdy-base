@@ -495,3 +495,44 @@ newtype Proof = Proof ByteString deriving (Eq, Show, Read)
 
 -- | A DER-encoded client certificate.
 newtype Certificate = Certificate ByteString deriving (Eq, Show, Read)
+
+-- | A collection of functions for responding to the various types of
+-- frames.
+data FrameHandlers a =
+  FrameHandlers
+  { handleDataFrame :: DataFrame ->  a
+  , handleSynStreamFrame :: SPDYVersion -> SynStreamFrame -> a
+  , handleSynReplyFrame :: SPDYVersion -> SynReplyFrame -> a
+  , handleRstStreamFrame :: SPDYVersion -> RstStreamFrame -> a
+  , handleSettingsFrame :: SPDYVersion -> SettingsFrame -> a
+  , handlePingFrame :: SPDYVersion -> PingFrame -> a
+  , handleGoAwayFrame :: SPDYVersion -> GoAwayFrame -> a
+  , handleHeadersFrame :: SPDYVersion -> HeadersFrame -> a
+  , handleWindowUpdateFrame :: SPDYVersion -> WindowUpdateFrame -> a
+  , handleCredentialFrame :: SPDYVersion -> CredentialFrame -> a }
+
+-- | Applies the correct handler from a collection to a frame.
+handleFrame :: FrameHandlers a -> Frame -> a
+handleFrame handlers f =
+  case f of
+    ADataFrame df -> handleDataFrame handlers df
+    AControlFrame v cf ->
+      case cf of
+        ASynStreamFrame f ->
+          handleSynStreamFrame handlers v f
+        ASynReplyFrame f ->
+          handleSynReplyFrame handlers v f
+        ARstStreamFrame f ->
+          handleRstStreamFrame handlers v f
+        ASettingsFrame f ->
+          handleSettingsFrame handlers v f
+        APingFrame f ->
+          handlePingFrame handlers v f
+        AGoAwayFrame f ->
+          handleGoAwayFrame handlers v f
+        AHeadersFrame f ->
+          handleHeadersFrame handlers v f
+        AWindowUpdateFrame f ->
+          handleWindowUpdateFrame handlers v f
+        ACredentialFrame f ->
+          handleCredentialFrame handlers v f
