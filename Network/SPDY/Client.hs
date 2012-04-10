@@ -88,8 +88,7 @@ client opts = do
 ping :: PingOptions -> Client -> ConnectionKey -> IO PingResult
 ping opts client cKey = do
   conn <- getConnection client cKey
-  frame <- pingFrame conn
-  let thePingID = pingID $ controlFrameDetails frame
+  (thePingID, frame) <- pingFrame conn
   endTimeMVar <- newEmptyMVar
   installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
   finally
@@ -439,9 +438,10 @@ closeConnection conn maybeGoAwayStatus = do
           return (foldr DM.delete m keys, ())
 
 -- | Creates a client-initiated PING frame for this connection.
-pingFrame :: Connection -> IO Frame
-pingFrame conn =
-  (controlFrame conn . Ping) `fmap` nextPingID conn
+pingFrame :: Connection -> IO (PingID, Frame)
+pingFrame conn = do
+  id <- nextPingID conn
+  return (id, controlFrame conn $ PingFrame $ Ping id)
 
 -- | Creates a GO_AWAY frame for this connection, with a given status.
 goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
@@ -539,12 +539,14 @@ readFrames conn = readFrames' B.empty
                      if isLast then endOfStream s else updateWindow' conn s dws)
             ControlFrame _ details ->
               case details of
-                Ping pingID | isClientInitiated pingID ->
-                  removePingHandler conn pingID >>= maybe (return ()) id
-                Ping _ ->
-                  -- we echo the exact same frame as the response
-                  queueFrame conn ASAP frame >>
-                  queueFlush conn ASAP
+                PingFrame p ->
+                  let thePingID = pingID p
+                  in if isClientInitiated thePingID
+                     then removePingHandler conn thePingID >>= maybe (return ()) id
+                     else
+                       -- we echo the exact same frame as the response
+                       queueFrame conn ASAP frame >>
+                       queueFlush conn ASAP
                 SynReplyFrame sr ->
                   let flags = synReplyFlags sr
                       sid = synReplyNewStreamID sr

@@ -58,7 +58,7 @@ toControlType details =
     SynReplyFrame _ -> cftSynReply
     RstStreamFrame _ -> cftRstStream
     SettingsFrame _ -> cftSettings
-    Ping _ -> cftPing
+    PingFrame _ -> cftPing
     GoAway _ _ -> cftGoAway
     Headers _ _ _ -> cftHeaders
     WindowUpdate _ _ -> cftWindowUpdate
@@ -102,8 +102,8 @@ toControlPayloadBuilder deflate details =
       return $ toBuilder (rstStreamTermStreamID rs) `mappend` toBuilder (rstStreamTermStatus rs)
     SettingsFrame s ->
       return $ toBuilder (settingsPairs s)
-    Ping pid ->
-      return $ toBuilder pid
+    PingFrame p ->
+      return $ toBuilder (pingID p)
     GoAway sid status ->
       return $ toBuilder sid `mappend` toBuilder status
     Headers _ sid hb ->

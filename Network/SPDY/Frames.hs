@@ -100,10 +100,7 @@ data ControlFrameDetails =
   -- frame to the sender as soon as possible. If there is other data
   -- waiting to be sent, the 'Ping' frame should take the highest
   -- priority. Each ping sent by sender should have a unique ID.
-  Ping
-  { pingID :: PingID
-    -- ^ A unique ID for this ping.
-  } |
+  PingFrame Ping |
   -- | Tells the remote endpoint to stop using this session. Once
   -- sent, the sender will not initiate any new streams on this
   -- session, and once received the receiver should not send any new
@@ -274,6 +271,13 @@ data Settings =
   Settings
   { settingsFlags :: Flags SettingsFlag
   , settingsPairs :: [(SettingIDAndFlags, SettingValue)]
+  }
+  deriving (Eq, Read, Show)
+
+data Ping =
+  Ping
+  { pingID :: PingID
+    -- ^ A unique ID for this ping.
   }
   deriving (Eq, Read, Show)
 
