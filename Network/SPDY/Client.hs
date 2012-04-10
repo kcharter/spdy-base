@@ -557,13 +557,16 @@ readFrames conn = readFrames' B.empty
                      (\s -> do
                          ssHeaderConsumer s (Just headers)
                          when (isSet SynReplyFlagFin flags) (endOfStream s))
-                Headers flags sid (HeaderBlock headers) ->
-                  lookupStream conn sid >>=
-                  maybe
-                  (streamError ("HEADERS for unknown stream ID " ++ show sid))
-                  (\s -> do
-                      ssHeaderConsumer s (Just headers)
-                      when (isSet HeadersFlagFin flags) (endOfStream s))
+                HeadersFrame h ->
+                  let sid = headersStreamID h
+                      flags = headersFlags h
+                      (HeaderBlock headers) = headersHeaderBlock h
+                  in lookupStream conn sid >>=
+                     maybe
+                     (streamError ("HEADERS for unknown stream ID " ++ show sid))
+                     (\s -> do
+                         ssHeaderConsumer s (Just headers)
+                         when (isSet HeadersFlagFin flags) (endOfStream s))
                 _ ->
                   logErr "Don't know how to handle control frames other than pings"
         -- TODO: the connection (or client) needs a logger; we

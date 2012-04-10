@@ -108,13 +108,7 @@ data ControlFrameDetails =
   -- tear-down of a session.
   GoAwayFrame GoAway |
   -- | Augments an existing stream with additional headers.
-  Headers
-  { headersFlags :: Flags HeadersFlag
-  , headersStreamID :: StreamID
-    -- ^ The stream ID of the stream to which the headers apply.
-  , headerBlock :: HeaderBlock
-    -- ^ The set of header-value pairs.
-  } |
+  HeadersFrame Headers |
   -- | Informs the recipient that there is a (positive) change in the
   -- amount of free space in the sender's data transfer window. This
   -- frame is part of SPDY's approach to flow control. An endpoint's
@@ -282,6 +276,16 @@ data GoAway =
     -- ID.
   , goAwayStatus :: GoAwayStatus
     -- ^ The reason for closing the session.
+  }
+  deriving (Eq, Read, Show)
+
+data Headers =
+  Headers
+  { headersFlags :: Flags HeadersFlag
+  , headersStreamID :: StreamID
+    -- ^ The stream ID of the stream to which the headers apply.
+  , headersHeaderBlock :: HeaderBlock
+    -- ^ The set of header-value pairs.
   }
   deriving (Eq, Read, Show)
 

@@ -60,7 +60,7 @@ toControlType details =
     SettingsFrame _ -> cftSettings
     PingFrame _ -> cftPing
     GoAwayFrame _ -> cftGoAway
-    Headers _ _ _ -> cftHeaders
+    HeadersFrame _ -> cftHeaders
     WindowUpdate _ _ -> cftWindowUpdate
     Credential _ _ _ -> cftCredential
 
@@ -72,7 +72,7 @@ toFlagsByte frame =
         SynStreamFrame ss -> toWord8 $ synStreamFlags ss
         SynReplyFrame sr -> toWord8 $ synReplyFlags sr
         SettingsFrame s -> toWord8 $ settingsFlags s
-        Headers f _ _ -> toWord8 f
+        HeadersFrame h -> toWord8 $ headersFlags h
         _ -> 0x0
     DataFrame d -> toWord8 $ dataFlags d
 
@@ -106,8 +106,8 @@ toControlPayloadBuilder deflate details =
       return $ toBuilder (pingID p)
     GoAwayFrame g ->
       return $ toBuilder (goAwayLastGoodStreamID g) `mappend` toBuilder (goAwayStatus g)
-    Headers _ sid hb ->
-      return $ toBuilder sid `mappend` toBuilder hb
+    HeadersFrame h ->
+      return $ toBuilder (headersStreamID h) `mappend` toBuilder (headersHeaderBlock h)
     WindowUpdate sid dws ->
       return $ toBuilder sid `mappend` toBuilder dws
     Credential slot proof certs ->

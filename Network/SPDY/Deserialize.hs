@@ -78,7 +78,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftGoAway =
       (GoAwayFrame . uncurry GoAway) <$> parsePayload parseGoAwayContent pl
   | ctype == cftHeaders =
-      uncurry (Headers (Flags flags)) <$> parsePayload parseHeadersContent pl
+      (HeadersFrame . uncurry (Headers (Flags flags))) <$> parsePayload parseHeadersContent pl
   | ctype == cftWindowUpdate =
       uncurry WindowUpdate <$> parsePayload parseWindowUpdateContent pl
   | ctype == cftCredential =

@@ -64,7 +64,7 @@ instance Arbitrary ControlFrameDetails where
           , SettingsFrame <$> arbitrary
           , PingFrame <$> arbitrary
           , GoAwayFrame <$> arbitrary
-          , Headers <$> arbitrary <*> arbitrary <*> arbitrary
+          , HeadersFrame <$> arbitrary
           , WindowUpdate <$> arbitrary <*> arbitrary
           , Credential <$> arbitrary <*> arbitrary <*> arbitrary ]
 
@@ -171,6 +171,9 @@ instance Arbitrary GoAwayStatus where
       where fixedValues = [ GoAwayOK,
                             GoAwayProtocolError,
                             GoAwayInternalError ]
+
+instance Arbitrary Headers where
+  arbitrary = Headers <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary HeadersFlag where
   arbitrary = return HeadersFlagFin
