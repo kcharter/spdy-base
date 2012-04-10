@@ -106,14 +106,7 @@ data ControlFrameDetails =
   -- session, and once received the receiver should not send any new
   -- requests on this session. This is intended to allow the orderly
   -- tear-down of a session.
-  GoAway
-  { lastGoodStreamID :: StreamID
-    -- ^ The last stream ID which was accepted by the sender of this
-    -- message. If no streams were accepted, must be the zero stream
-    -- ID.
-  , goAwayStatus :: GoAwayStatus
-    -- ^ The reason for closing the session.
-  } |
+  GoAwayFrame GoAway |
   -- | Augments an existing stream with additional headers.
   Headers
   { headersFlags :: Flags HeadersFlag
@@ -278,6 +271,17 @@ data Ping =
   Ping
   { pingID :: PingID
     -- ^ A unique ID for this ping.
+  }
+  deriving (Eq, Read, Show)
+
+data GoAway =
+  GoAway
+  { goAwayLastGoodStreamID :: StreamID
+    -- ^ The last stream ID which was accepted by the sender of this
+    -- message. If no streams were accepted, must be the zero stream
+    -- ID.
+  , goAwayStatus :: GoAwayStatus
+    -- ^ The reason for closing the session.
   }
   deriving (Eq, Read, Show)
 

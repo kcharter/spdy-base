@@ -447,7 +447,7 @@ pingFrame conn = do
 goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
 goAwayFrame conn goAwayStatus = do
   lastStreamID <- getLastAcceptedStreamID conn
-  return $ controlFrame conn $ GoAway lastStreamID goAwayStatus
+  return $ controlFrame conn $ GoAwayFrame $ GoAway lastStreamID goAwayStatus
 
 -- | Creates a SYN_STREAM frame, used to initiate a new stream.
 synStreamFrame :: Connection

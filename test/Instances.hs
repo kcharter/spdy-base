@@ -63,7 +63,7 @@ instance Arbitrary ControlFrameDetails where
           , RstStreamFrame <$> arbitrary
           , SettingsFrame <$> arbitrary
           , PingFrame <$> arbitrary
-          , GoAway <$> arbitrary <*> arbitrary
+          , GoAwayFrame <$> arbitrary
           , Headers <$> arbitrary <*> arbitrary <*> arbitrary
           , WindowUpdate <$> arbitrary <*> arbitrary
           , Credential <$> arbitrary <*> arbitrary <*> arbitrary ]
@@ -160,6 +160,9 @@ instance Arbitrary Ping where
 
 instance Arbitrary PingID where
   arbitrary = (PingID . fromIntegral) <$> choose (0, 2 ^ 29 - 1 :: Int)
+
+instance Arbitrary GoAway where
+  arbitrary = GoAway <$> arbitrary <*> arbitrary
 
 instance Arbitrary GoAwayStatus where
   arbitrary =

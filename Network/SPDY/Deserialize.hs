@@ -76,7 +76,7 @@ parseControlFrameDetails inflate ctype flags pl
   | ctype == cftPing =
       (PingFrame . Ping) <$> parsePayload parsePingID pl
   | ctype == cftGoAway =
-      uncurry GoAway <$> parsePayload parseGoAwayContent pl
+      (GoAwayFrame . uncurry GoAway) <$> parsePayload parseGoAwayContent pl
   | ctype == cftHeaders =
       uncurry (Headers (Flags flags)) <$> parsePayload parseHeadersContent pl
   | ctype == cftWindowUpdate =

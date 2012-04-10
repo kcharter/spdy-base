@@ -59,7 +59,7 @@ toControlType details =
     RstStreamFrame _ -> cftRstStream
     SettingsFrame _ -> cftSettings
     PingFrame _ -> cftPing
-    GoAway _ _ -> cftGoAway
+    GoAwayFrame _ -> cftGoAway
     Headers _ _ _ -> cftHeaders
     WindowUpdate _ _ -> cftWindowUpdate
     Credential _ _ _ -> cftCredential
@@ -104,8 +104,8 @@ toControlPayloadBuilder deflate details =
       return $ toBuilder (settingsPairs s)
     PingFrame p ->
       return $ toBuilder (pingID p)
-    GoAway sid status ->
-      return $ toBuilder sid `mappend` toBuilder status
+    GoAwayFrame g ->
+      return $ toBuilder (goAwayLastGoodStreamID g) `mappend` toBuilder (goAwayStatus g)
     Headers _ sid hb ->
       return $ toBuilder sid `mappend` toBuilder hb
     WindowUpdate sid dws ->
