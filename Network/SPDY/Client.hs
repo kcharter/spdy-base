@@ -410,7 +410,7 @@ setupConnection client cKey =
         -- TODO: record the thread IDs in an IORef in the connection,
         -- so we can forcibly terminate the reading thread should it
         -- be necessary
-        forkIO (readFrames conn)
+        forkIO (readFrames conn (clientInputFrameHandlers conn))
         forkIO (doOutgoingJobs conn)
         return conn
 
@@ -503,8 +503,8 @@ setLastAcceptedStreamID conn streamID =
 
 -- | Read frames from the server, updating the connection state as the
 -- frames are received.
-readFrames :: Connection -> IO ()
-readFrames conn = readFrames' B.empty
+readFrames :: Connection -> FrameHandlers (IO ()) -> IO ()
+readFrames conn handlers = readFrames' B.empty
   where readFrames' bytes = do
           (errOrFrame, bytes') <- readAFrame bytes
           touch conn
@@ -525,7 +525,7 @@ readFrames conn = readFrames' B.empty
               _ -> return ()
         handleInputFrame frame = do
           logErr $ "read frame:\n" ++ show frame
-          handleFrame (clientInputFrameHandlers conn) frame
+          handleFrame handlers frame
         logErr = logMessage conn
 
 -- | A set of input frame handlers for a client endpoint.
