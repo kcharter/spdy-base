@@ -17,6 +17,7 @@ word-for-word from the draft spec.
 
 module Network.SPDY.Frames where
 
+import Control.Monad.Trans (MonadIO)
 import Data.Word
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC8
@@ -536,3 +537,20 @@ handleFrame handlers f =
           handleWindowUpdateFrame handlers v f
         ACredentialFrame f ->
           handleCredentialFrame handlers v f
+
+-- | A set of do-nothing frame handlers in a monad capable of IO.
+defaultIOFrameHandlers :: MonadIO m => FrameHandlers (m ())
+defaultIOFrameHandlers =
+  FrameHandlers
+  { handleDataFrame = doNothing1
+  , handleSynStreamFrame = doNothing2
+  , handleSynReplyFrame = doNothing2
+  , handleRstStreamFrame = doNothing2
+  , handleSettingsFrame = doNothing2
+  , handlePingFrame = doNothing2
+  , handleGoAwayFrame = doNothing2
+  , handleHeadersFrame = doNothing2
+  , handleWindowUpdateFrame = doNothing2
+  , handleCredentialFrame = doNothing2 }
+    where doNothing1 = const $ return ()
+          doNothing2 = const $ const $ return ()

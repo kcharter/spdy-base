@@ -508,7 +508,7 @@ readFrames conn = readFrames' B.empty
   where readFrames' bytes = do
           (errOrFrame, bytes') <- readAFrame bytes
           touch conn
-          either handleError (\f -> handleFrame f >> readFrames' bytes') errOrFrame
+          either handleError (\f -> handleInputFrame f >> readFrames' bytes') errOrFrame
         readAFrame bytes = readAFrame' (parse parseRawFrame bytes)
         readAFrame' (Fail bytes _ msg) = return (Left msg, bytes)
         readAFrame' (Partial continue) =
@@ -523,65 +523,74 @@ readFrames conn = readFrames' B.empty
               Open _ -> logErr "closing connection with a protocol error" >>
                         closeConnection conn (Just GoAwayProtocolError)
               _ -> return ()
-        handleFrame frame = do
+        handleInputFrame frame = do
           logErr $ "read frame:\n" ++ show frame
-          case frame of
-            ADataFrame d ->
-              let sid = streamID d
-                  flags = dataFlags d
-                  bytes = dataBytes d
-              in lookupStream conn sid >>=
-                 maybe
-                 (streamError $ "DATA frame for unknown stream " ++ show sid)
-                 (\s -> do
-                     let isLast = isSet DataFlagFin flags
-                     dws <- ssDataConsumer s (Just bytes)
-                     if isLast then endOfStream s else updateWindow' conn s dws)
-            AControlFrame _ cf ->
-              case cf of
-                APingFrame p ->
-                  let thePingID = pingID p
-                  in if isClientInitiated thePingID
-                     then removePingHandler conn thePingID >>= maybe (return ()) id
-                     else
-                       -- we echo the exact same frame as the response
-                       queueFrame conn ASAP frame >>
-                       queueFlush conn ASAP
-                ASynReplyFrame sr ->
-                  let flags = synReplyFlags sr
-                      sid = synReplyNewStreamID sr
-                      (HeaderBlock headers) = synReplyHeaderBlock sr
-                  in lookupStream conn sid >>=
-                     maybe
-                     (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
-                     (\s -> do
-                         ssHeaderConsumer s (Just headers)
-                         when (isSet SynReplyFlagFin flags) (endOfStream s))
-                AHeadersFrame h ->
-                  let sid = headersStreamID h
-                      flags = headersFlags h
-                      (HeaderBlock headers) = headersHeaderBlock h
-                  in lookupStream conn sid >>=
-                     maybe
-                     (streamError ("HEADERS for unknown stream ID " ++ show sid))
-                     (\s -> do
-                         ssHeaderConsumer s (Just headers)
-                         when (isSet HeadersFlagFin flags) (endOfStream s))
-                _ ->
-                  logErr "Don't know how to handle control frames other than pings"
-        -- TODO: the connection (or client) needs a logger; we
-        -- shouldn't just print to stderr
-        logErr = hPutStrLn stderr
-        endOfStream s = do
-          ssHeaderConsumer s Nothing
-          ssDataConsumer s Nothing
-          -- TODO: in order to tell whether the stream is really
-          -- finished, we need to know whether the stream is closed
-          -- from our side or not.
-          removeStream conn (ssStreamID s)
-        streamError msg =
-          logErr msg
-          -- TODO: I think we're supposed to send a GOAWAY and clean up
+          handleFrame (clientInputFrameHandlers conn) frame
+        logErr = logMessage conn
+
+-- | A set of input frame handlers for a client endpoint.
+clientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+clientInputFrameHandlers conn =
+  defaultIOFrameHandlers { handleDataFrame = forDataFrame
+                         , handlePingFrame = forPingFrame
+                         , handleSynReplyFrame = forSynReplyFrame
+                         , handleHeadersFrame = forHeadersFrame }
+    where forDataFrame d =
+            let sid = streamID d
+                flags = dataFlags d
+                bytes = dataBytes d
+            in lookupStream conn sid >>=
+               maybe
+               (streamError $ "DATA frame for unknown stream " ++ show sid)
+               (\s -> do
+                   let isLast = isSet DataFlagFin flags
+                   dws <- ssDataConsumer s (Just bytes)
+                   if isLast then endOfStream s else updateWindow' conn s dws)
+          forPingFrame _ p =
+            let thePingID = pingID p
+            in if isClientInitiated thePingID
+               then removePingHandler conn thePingID >>= maybe (return ()) id
+               else
+                 -- we echo the exact same frame as the response
+                 queueFrame conn ASAP (controlFrame conn $ APingFrame p) >>
+                 queueFlush conn ASAP
+          forSynReplyFrame _ sr =
+            let flags = synReplyFlags sr
+                sid = synReplyNewStreamID sr
+                (HeaderBlock headers) = synReplyHeaderBlock sr
+            in lookupStream conn sid >>=
+               maybe
+               (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
+               (\s -> do
+                   ssHeaderConsumer s (Just headers)
+                   when (isSet SynReplyFlagFin flags) (endOfStream s))
+          forHeadersFrame _ h =
+            let sid = headersStreamID h
+                flags = headersFlags h
+                (HeaderBlock headers) = headersHeaderBlock h
+            in lookupStream conn sid >>=
+               maybe
+               (streamError ("HEADERS for unknown stream ID " ++ show sid))
+               (\s -> do
+                   ssHeaderConsumer s (Just headers)
+                   when (isSet HeadersFlagFin flags) (endOfStream s))
+          logErr = logMessage conn
+          endOfStream s = do
+            ssHeaderConsumer s Nothing
+            ssDataConsumer s Nothing
+            -- TODO: in order to tell whether the stream is really
+            -- finished, we need to know whether the stream is closed
+            -- from our side or not.
+            removeStream conn (ssStreamID s)
+          streamError msg =
+            logErr msg
+            -- TODO: I think we're supposed to send a GOAWAY and clean up
+
+-- | Sends an error message to the logger for a connection.
+logMessage :: Connection -> String -> IO ()
+-- TODO: the connection (or client) needs a logger; we
+-- shouldn't just print to stderr
+logMessage = const (hPutStrLn stderr)
 
 -- | Priorities for jobs submitted to the outgoing channel.
 data OutgoingPriority =
