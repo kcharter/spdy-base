@@ -379,44 +379,43 @@ getConnection client cKey = do
   modifyMVar (connectionMapMVar client) $ \cm ->
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
-              c <- setupConnection client cKey
+              h <- uncurry connectTo $ toConnectParams cKey
+              c <- setupConnection client cKey h
               return (DM.insert cKey c cm, c)
 
--- | Establishes a connection for a given connection key.
-setupConnection :: Client -> ConnectionKey -> IO Connection
-setupConnection client cKey =
-  let (hn, p) = toConnectParams cKey
-  in do h <- connectTo hn p
-        keysRef <- newIORef [cKey]
-        now <- getCurrentTime
-        lifeCycleStateRef <- newIORef (Open now)
-        pingIDRef <- newIORef (PingID 1)
-        nextStreamIDRef <- newIORef (StreamID 1)
-        lastStreamIDRef <- newIORef (StreamID 0)
-        pingHandlersRef <- newIORef DM.empty
-        streamsRef <- newIORef DM.empty
-        inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
-        deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
-        outgoing <- PC.newChan
-        let conn = Connection { connClient = client,
-                                connKeys = keysRef,
-                                connSPDYVersion = spdyVersion3,
-                                connNextPingIDRef = pingIDRef,
-                                connNextStreamIDRef = nextStreamIDRef,
-                                connLifeCycleState = lifeCycleStateRef,
-                                connLastAcceptedStreamID = lastStreamIDRef,
-                                connSocketHandle = h,
-                                connInflate = inflate,
-                                connDeflate = deflate,
-                                connOutgoing = outgoing,
-                                connPingHandlers = pingHandlersRef,
-                                connStreams = streamsRef }
-        -- TODO: record the thread IDs in an IORef in the connection,
-        -- so we can forcibly terminate the reading thread should it
-        -- be necessary
-        forkIO (readFrames conn (clientInputFrameHandlers client conn))
-        forkIO (doOutgoingJobs conn)
-        return conn
+-- | Creates and installs a connection for a given connection key and IO handle.
+setupConnection :: Client -> ConnectionKey -> Handle -> IO Connection
+setupConnection client cKey h =
+  do keysRef <- newIORef [cKey]
+     now <- getCurrentTime
+     lifeCycleStateRef <- newIORef (Open now)
+     pingIDRef <- newIORef (PingID 1)
+     nextStreamIDRef <- newIORef (StreamID 1)
+     lastStreamIDRef <- newIORef (StreamID 0)
+     pingHandlersRef <- newIORef DM.empty
+     streamsRef <- newIORef DM.empty
+     inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
+     deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
+     outgoing <- PC.newChan
+     let conn = Connection { connClient = client,
+                             connKeys = keysRef,
+                             connSPDYVersion = spdyVersion3,
+                             connNextPingIDRef = pingIDRef,
+                             connNextStreamIDRef = nextStreamIDRef,
+                             connLifeCycleState = lifeCycleStateRef,
+                             connLastAcceptedStreamID = lastStreamIDRef,
+                             connSocketHandle = h,
+                             connInflate = inflate,
+                             connDeflate = deflate,
+                             connOutgoing = outgoing,
+                             connPingHandlers = pingHandlersRef,
+                             connStreams = streamsRef }
+     -- TODO: record the thread IDs in an IORef in the connection,
+     -- so we can forcibly terminate the reading thread should it
+     -- be necessary
+     forkIO (readFrames conn (clientInputFrameHandlers client conn))
+     forkIO (doOutgoingJobs conn)
+     return conn
 
 -- | Cleanly shuts down a connection. If given a 'GoAwayStatus', sends
 -- the corresponding GOAWAY frame to the remote endpoint.
