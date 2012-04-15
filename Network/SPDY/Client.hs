@@ -71,8 +71,10 @@ defaultClientOptions =
 data Client =
   Client { options :: ClientOptions,
            -- ^ Options for this client.
-           connectionMapMVar :: MVar (DM.Map ConnectionKey Connection)
+           connectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
            -- ^ Connections by key.
+           clientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+           -- ^ Creates input frame handlers for a connection.
          }
 
 -- | Allocates a new client.
@@ -80,7 +82,9 @@ client :: ClientOptions -> IO Client
 client opts = do
   cmapMVar <- newMVar DM.empty
   return $ Client { options = opts,
-                    connectionMapMVar = cmapMVar }
+                    connectionMapMVar = cmapMVar,
+                    clientInputFrameHandlers = stdClientInputFrameHandlers
+                  }
 
 -- | Estimates the round-trip time for a connection by measuring the
 -- time to send a SPDY PING frame and receive the response from the
@@ -410,7 +414,7 @@ setupConnection client cKey =
         -- TODO: record the thread IDs in an IORef in the connection,
         -- so we can forcibly terminate the reading thread should it
         -- be necessary
-        forkIO (readFrames conn (clientInputFrameHandlers conn))
+        forkIO (readFrames conn (clientInputFrameHandlers client conn))
         forkIO (doOutgoingJobs conn)
         return conn
 
@@ -529,8 +533,8 @@ readFrames conn handlers = readFrames' B.empty
         logErr = logMessage conn
 
 -- | A set of input frame handlers for a client endpoint.
-clientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
-clientInputFrameHandlers conn =
+stdClientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+stdClientInputFrameHandlers conn =
   defaultIOFrameHandlers { handleDataFrame = forDataFrame
                          , handlePingFrame = forPingFrame
                          , handleSynReplyFrame = forSynReplyFrame
