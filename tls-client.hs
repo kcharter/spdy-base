@@ -16,12 +16,15 @@ import qualified Network.TLS.Extra as TLSX
 defineOptions "Opts" $ do
   stringOption "optServer" "server" "localhost" "Server name or IP address."
   intOption "optPort" "port" 15000 "Server port to connect to."
+  stringOption "optProtocol" "protocol" "hello" "Protocol to negotiate with the server."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do
   let hostName = optServer opts
       port = fromIntegral $ optPort opts
-      tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all }
+      proto = C8.pack $ optProtocol opts
+      tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
+                                    , TLS.onNPNServerSuggest = Just $ const (return proto) }
   rng <- CR.newGenIO :: IO CR.SystemRandom
   h <- connectTo hostName (PortNumber port)
   log "connected"

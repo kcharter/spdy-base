@@ -7,10 +7,12 @@ import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar)
 import Control.Monad (when)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
-import Data.ByteString.Lazy.Char8 ()
+import qualified Data.ByteString.Lazy.Char8 as LC8
 import Data.Char (isSpace, toLower)
 import Data.Maybe (listToMaybe)
+import Data.Time.LocalTime (getZonedTime)
 import Network.Socket
 import System.Environment (getArgs)
 import System.IO
@@ -70,7 +72,9 @@ runServer port cert key = do
   listen s 2
   rng <- (CR.newGenIO :: IO CR.SystemRandom)
   let tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
-                                    , TLS.pCertificates = [(cert, Just key)] }
+                                    , TLS.pCertificates = [(cert, Just key)]
+                                    , TLS.onSuggestNextProtocols =
+                                      return (Just ["hello", "time"]) }
   loop tlsParams rng s
   where loop tlsParams rng s = do
           (s', sa) <- accept s
@@ -78,5 +82,13 @@ runServer port cert key = do
           forkIO (socketToHandle s' ReadWriteMode >>= \h -> do
                      tlsCtx <- TLS.server tlsParams rng h
                      TLS.handshake tlsCtx
+                     maybeProtocol <- TLS.getNegotiatedProtocol tlsCtx
+                     maybe (TLS.bye tlsCtx) (handleProtocol tlsCtx) maybeProtocol
                      TLS.sendData tlsCtx "hello!\n")
           loop tlsParams rng s
+        handleProtocol tlsCtx protocol =
+          case C8.unpack protocol of
+            "hello" -> TLS.sendData tlsCtx "hello!\n"
+            "time"  -> do time <- getZonedTime
+                          TLS.sendData tlsCtx (LC8.pack $ show time)
+            huh     -> TLS.sendData tlsCtx $ LC8.pack $ "unknown protocol: " ++ huh
