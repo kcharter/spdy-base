@@ -57,3 +57,38 @@ client-side modification that is necessary is installing the cipher
 suites.
 
 
+NPN extension
+-------------
+
+Using the NPN extension is pretty simple once you've got the basics of
+TLS working.
+
+1. on the server:
+
+   - define TLSParams.onSuggestNextProtocols to list the available
+     protocols
+
+   - after a successful TLS handshake, use 'getNegotiatedProtocol' to
+     find what protocol the client asked for. Note that the client may
+     ask for a protocol that did not appear in the list supplied by
+     'onSuggestNextProtocols', so we have to handle the case of a
+     bogus protocol in some way.
+
+2. on the client:
+
+   - define TLSParams.onNPNServerSuggest with a function that examines
+     the server-suggested protocols and picks one. Note that it is
+     possible for the client to pick a protocol that isn't in the
+     list. However, the interface forces the client to return a byte
+     string of some kind.
+
+   - after a successful TLS handshake, use 'getNegotiatedProtocol' to
+     find what protocol has been agreed upon. Note that 'agreed upon'
+     here really means 'selected by the client', whether the protocol
+     appeared in the server's list of suggestions or not. It appears
+     to be up to the server to reject protocols that are bogus.
+
+I'll have to read the spec to determine whether this implementation of
+NPN is faithful. In particular, whether the TLS layer should really
+pass bogus protocol names on to the server.
+

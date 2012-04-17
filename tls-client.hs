@@ -32,6 +32,8 @@ main = runCommand $ \opts _ -> do
   log "created TLS context"
   TLS.handshake tlsCtx
   log "made TLS handshake"
+  maybeProto <- TLS.getNegotiatedProtocol tlsCtx
+  log $ "the negotiated protocol is " ++ show maybeProto
   s <- TLS.recvData tlsCtx
   log "received data"
   TLS.bye tlsCtx
