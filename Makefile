@@ -4,7 +4,7 @@
 
 GHC=ghc
 GHC_FLAGS=-odir tmp -hidir tmp -O -package-conf cabal-dev/packages-7.0.4.conf
-PROGS=sping sget sget-prof
+PROGS=sping sget sget-prof tls-server tls-client
 
 all: $(PROGS)
 
@@ -16,6 +16,12 @@ sget: SGet.hs
 
 sget-prof: SGet.hs
 	$(GHC) $(GHC_FLAGS) --make SGet -main-is SGet -o sget-prof -rtsopts -prof -auto-all -caf-all
+
+tls-server: tls-server.hs
+	$(GHC) $(GHC_FLAGS) --make tls-server -main-is TlsServer -o tls-server
+
+tls-client: tls-client.hs
+	$(GHC) $(GHC_FLAGS) --make tls-client -main-is TlsClient -o tls-client
 
 clean:
 	rm -rf $(PROGS) tmp

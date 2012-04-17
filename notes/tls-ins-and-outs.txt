@@ -1,0 +1,59 @@
+Ins and outs of using the hs-tls package
+----------------------------------------
+
+- the 'defaultParams' set of TLS parameters are not usable out of the
+  box, for several reasons:
+
+  - the 'pCiphers' field is empty, so a client will fail to connect to
+    a server, complaining that they cannot agree on a cipher suite
+
+    To fix this, you need to install tls-extra, and configure a list
+    of cipher suites on the client and server (I used
+    ciphersuite_all). Of course, the lists have to have some element
+    in common.
+
+  - once you've fixed that, the client will die unceremoniously with a
+    exception, obviously an attempt to take the head of an empty list
+
+    The problem appears to be that there is no certificate on the
+    server side. I expected this -- after all, TLS isn't much use if
+    there is no server-side certificate -- but the error isn't very
+    graceful.
+
+- figuring out how to parse a PEM-encoded DER representation of the
+  server certificate is in itself a challenge, largely because of
+  scanty documentation. Ultimately, you have to use 'parsePEMCert'
+  from Data.Certificate.PEM, and then feed the (successful) result
+  into 'decodeCertificate' from Data.Certificate.X509. Inconveniently,
+  'parsePEMCert' expects *strict* byte strings, while
+  'decodeCertificate' expects lazy ones.
+
+  However, once you figure out to use Data.ByteString.Lazy.fromChunks,
+  you can iron this out. However, it's a little awkward, and I'd say
+  it's a bad practice to be forced to read the entire contents of a
+  file into memory in order to run 'parsePEMCert'.
+
+- once you get the certificate parsed, you then have another problem
+  on the server side: you must also load the private key. The type of
+  the 'pCertificates' field of TLSParams is
+
+  [(X509, Maybe PrivateKey)]
+
+  which gives you the impression that the private key is
+  optional. It's not. But there is a graceless error on the server
+  side from 'fromJust' complaining that it got Nothing.
+
+  Parsing the private key from a file and pairing it with the
+  certificate works. This is similar to reading a certificate from a
+  PEM file, but you have to use 'parsePEMKeyRSA' from
+  Data.Cerficate.PEM and 'decodePrivate' from
+  Data.Certificate.KeyRSA. And you have the same hassle with
+  conversion from strict to lazy byte strings in the middle.
+
+Once all these things were addressed, I could successfully run a TLS
+server that says 'hello' to successfully connected clients, and run a
+client against the server and fetch the 'hello' message. The only
+client-side modification that is necessary is installing the cipher
+suites.
+
+
