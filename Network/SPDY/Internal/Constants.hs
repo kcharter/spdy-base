@@ -29,7 +29,7 @@ cftWindowUpdate :: Word16
 cftWindowUpdate = 0x9
 
 cftCredential :: Word16
-cftCredential = 0xB
+cftCredential = 0xA
 
 
 tsProtocolError :: Word32
