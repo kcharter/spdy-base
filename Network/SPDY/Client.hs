@@ -4,6 +4,7 @@
 -- | SPDY client implementation, without direct HTTP support.
 
 module Network.SPDY.Client (ClientOptions(..),
+                            ConnectionStyle(..),
                             defaultClientOptions,
                             Client,
                             client,
@@ -29,6 +30,7 @@ import Control.Monad (when)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.Maybe (isNothing)
@@ -40,6 +42,10 @@ import Network.Socket (HostAddress, HostAddress6, PortNumber)
 import System.IO (hPutStrLn, stderr)
 import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
+
+import qualified Crypto.Random as CR
+import qualified Network.TLS as TLS
+import qualified Network.TLS.Extra as TLSX
 
 import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
@@ -60,14 +66,33 @@ import Network.SPDY.Serialize
 -- | Options for clients.
 data ClientOptions =
   ClientOptions { coptConnectionTimeoutSeconds :: Maybe Int
-                -- ^ The number of seconds without any activity before
-                -- closing a connection. If 'Nothing', there is no
-                -- timeout.
+                  -- ^ The number of seconds without any activity before
+                  -- closing a connection. If 'Nothing', there is no
+                  -- timeout.
+                , coptConnectionStyle :: ConnectionStyle
+                  -- ^ The kind of network connection to establish
+                  -- with remote endpoints. A single client supports
+                  -- only one style of connection.
                 }
+
+-- | The kinds of low-level connections between SPDY endpoints.
+data ConnectionStyle =
+  CsTLS |
+  -- ^ Use TLS over a socket. This is the normal form of connection in
+  -- production.
+  CsSocket |
+  -- ^ Use an unencrypted socket. This is mostly intended for talking
+  -- to development servers that have the option of serving SPDY
+  -- without using TLS.
+  CsCustom (ConnectionKey -> IO NetworkConnection)
+  -- ^ Use the provided function for creating the network connection
+  -- with a remote endpoint. This is intended to support testing.
+
 
 -- | The default set of client options.
 defaultClientOptions =
-  ClientOptions { coptConnectionTimeoutSeconds = Nothing }
+  ClientOptions { coptConnectionTimeoutSeconds = Nothing
+                , coptConnectionStyle = CsTLS }
 
 -- | A low-level SPDY client.
 data Client =
@@ -381,9 +406,41 @@ getConnection client cKey = do
   modifyMVar (connectionMapMVar client) $ \cm ->
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
-              h <- uncurry connectTo $ toConnectParams cKey
-              c <- setupConnection client cKey $ NC.fromHandle h
+              nc <- toNetworkConnection (coptConnectionStyle $ options client) cKey
+              c <- setupConnection client cKey nc
               return (DM.insert cKey c cm, c)
+
+-- | Establishes a low-level network connection to the identified
+-- remote endpoint.
+toNetworkConnection :: ConnectionStyle -> ConnectionKey -> IO NetworkConnection
+toNetworkConnection cs cKey =
+  case cs of
+    CsTLS ->
+      do let protocol = C8.pack "spdy/3"
+             tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
+                                           , TLS.onNPNServerSuggest =
+                                             Just $ \protos -> do
+                                               -- TODO: log instead of assuming stderr
+                                               hPutStrLn stderr "protocols offered by server:"
+                                               mapM_ (hPutStrLn stderr . C8.unpack) protos
+                                               return protocol }
+         rng <- CR.newGenIO :: IO CR.SystemRandom
+         h <- uncurry connectTo (toConnectParams cKey)
+         tlsCtx <- TLS.client tlsParams rng h
+         TLS.handshake tlsCtx
+         maybeProtocol <- TLS.getNegotiatedProtocol tlsCtx
+         -- TODO: brackOnError to close the handle
+         -- TODO: special SPDY errors for inability to negotiate the protocol
+         maybe
+           (ioError $ userError $ "Endpoint " ++ show cKey ++ " did not negotiate a next protocol.")
+           (\p -> if p /= protocol
+                  then ioError (userError $ "Endpoint " ++ show cKey ++ " insists on protocol " ++ show p)
+                  else return $ NC.fromTLSCtx tlsCtx)
+           maybeProtocol
+    CsSocket ->
+      NC.fromHandle `fmap` uncurry connectTo (toConnectParams cKey)
+    CsCustom mkConnection ->
+      mkConnection cKey
 
 -- | Creates and installs a connection for a given connection key and the network connection.
 setupConnection :: Client -> ConnectionKey -> NetworkConnection -> IO Connection
