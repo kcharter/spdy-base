@@ -3,7 +3,7 @@
 .PHONY: all clean
 
 GHC=ghc
-GHC_FLAGS=-odir tmp -hidir tmp -O -package-conf cabal-dev/packages-7.0.4.conf
+GHC_FLAGS=-odir tmp -hidir tmp -O -package-conf cabal-dev/packages-7.0.4.conf -hide-package monads-tf
 PROGS=sping sget sget-prof tls-server tls-client
 
 all: $(PROGS)

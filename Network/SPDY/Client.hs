@@ -27,7 +27,7 @@ import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, takeMVa
 import Control.Exception (finally, throw)
 import Control.Monad (when)
 import Data.Attoparsec.ByteString (parse, IResult(..))
-import Data.ByteString (ByteString, hPut, hGetSome)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
@@ -37,7 +37,7 @@ import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
 import Network (HostName, PortID(..), connectTo)
 import Network.Socket (HostAddress, HostAddress6, PortNumber)
-import System.IO (Handle, hPutStrLn, stderr, hFlush, hClose)
+import System.IO (hPutStrLn, stderr)
 import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
 
@@ -51,6 +51,8 @@ import Network.SPDY.Compression
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
 import qualified Network.SPDY.Internal.PriorityChan as PC
 import Network.SPDY.Deserialize
+import Network.SPDY.NetworkConnection (NetworkConnection)
+import qualified Network.SPDY.NetworkConnection as NC
 import Network.SPDY.Serialize
 
 -- * Client API
@@ -284,8 +286,8 @@ data Connection =
                connLastAcceptedStreamID :: IORef StreamID,
                -- ^ The last stream ID for which this endpoint sent a
                -- SYN_REPLY or RST_STREAM.
-               connSocketHandle :: Handle,
-               -- ^ The handle for the network connection.
+               connNetworkConnection :: NetworkConnection,
+               -- ^ The network connection with the remote endpoint.
                connDeflate :: Deflate,
                -- ^ The zlib deflation (compression) context.
                connInflate :: Inflate,
@@ -380,12 +382,12 @@ getConnection client cKey = do
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
               h <- uncurry connectTo $ toConnectParams cKey
-              c <- setupConnection client cKey h
+              c <- setupConnection client cKey $ NC.fromHandle h
               return (DM.insert cKey c cm, c)
 
--- | Creates and installs a connection for a given connection key and IO handle.
-setupConnection :: Client -> ConnectionKey -> Handle -> IO Connection
-setupConnection client cKey h =
+-- | Creates and installs a connection for a given connection key and the network connection.
+setupConnection :: Client -> ConnectionKey -> NetworkConnection -> IO Connection
+setupConnection client cKey nc =
   do keysRef <- newIORef [cKey]
      now <- getCurrentTime
      lifeCycleStateRef <- newIORef (Open now)
@@ -404,7 +406,7 @@ setupConnection client cKey h =
                              connNextStreamIDRef = nextStreamIDRef,
                              connLifeCycleState = lifeCycleStateRef,
                              connLastAcceptedStreamID = lastStreamIDRef,
-                             connSocketHandle = h,
+                             connNetworkConnection = nc,
                              connInflate = inflate,
                              connDeflate = deflate,
                              connOutgoing = outgoing,
@@ -434,7 +436,7 @@ closeConnection conn maybeGoAwayStatus = do
         maybeGoAwayStatus
       queueStop conn ASAP $ do
         atomicModifyIORef (connLifeCycleState conn) (const (Closed, ()))
-        hClose (connSocketHandle conn)
+        NC.close (connNetworkConnection conn)
     _ -> return ()
   where removeMe m = do
           keys <- readIORef (connKeys conn)
@@ -515,7 +517,7 @@ readFrames conn handlers = readFrames' B.empty
         readAFrame bytes = readAFrame' (parse parseRawFrame bytes)
         readAFrame' (Fail bytes _ msg) = return (Left msg, bytes)
         readAFrame' (Partial continue) =
-          hGetSome (connSocketHandle conn) 4096 >>= (readAFrame' . continue)
+          NC.receiveData (connNetworkConnection conn) >>= (readAFrame' . continue)
         readAFrame' (Done bytes rawFrame) = do
           errOrFrame <- toFrame (connInflate conn) rawFrame
           either (\msg -> return (Left msg, bytes)) (\frame -> return (Right frame, bytes)) errOrFrame
@@ -636,12 +638,12 @@ doOutgoingJobs conn = go
           case job of
             WriteFrame frame ->
               serializeFrame conn frame >>=
-              hPut (connSocketHandle conn) >>
+              NC.sendData (connNetworkConnection conn) >>
               touch conn >>
               checkForStreamAcks conn frame >>
               go
             Flush ->
-              hFlush (connSocketHandle conn) >> go
+              NC.flush (connNetworkConnection conn) >> go
             Stop action ->
               action
         checkForStreamAcks conn frame =
