@@ -98,9 +98,9 @@ defaultClientOptions =
 data Client =
   Client { options :: ClientOptions,
            -- ^ Options for this client.
-           connectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
+           epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
            -- ^ Connections by key.
-           clientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+           epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
            -- ^ Creates input frame handlers for a connection.
          }
 
@@ -109,8 +109,8 @@ client :: ClientOptions -> IO Client
 client opts = do
   cmapMVar <- newMVar DM.empty
   return $ Client { options = opts,
-                    connectionMapMVar = cmapMVar,
-                    clientInputFrameHandlers = stdClientInputFrameHandlers
+                    epConnectionMapMVar = cmapMVar,
+                    epInputFrameHandlers = stdClientInputFrameHandlers
                   }
 
 -- | Estimates the round-trip time for a connection by measuring the
@@ -389,7 +389,7 @@ serializeFrame conn = frameToByteString (connDeflate conn)
 -- | Obtains a connection, creating one if necessary.
 getConnection :: Client -> ConnectionKey -> IO Connection
 getConnection client cKey = do
-  modifyMVar (connectionMapMVar client) $ \cm ->
+  modifyMVar (epConnectionMapMVar client) $ \cm ->
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
               nc <- toNetworkConnection (coptConnectionStyle $ options client) cKey
@@ -458,7 +458,7 @@ setupConnection client cKey nc =
      -- TODO: record the thread IDs in an IORef in the connection,
      -- so we can forcibly terminate the reading thread should it
      -- be necessary
-     forkIO (readFrames conn (clientInputFrameHandlers client conn))
+     forkIO (readFrames conn (epInputFrameHandlers client conn))
      forkIO (doOutgoingJobs conn)
      return conn
 
@@ -472,7 +472,7 @@ closeConnection conn maybeGoAwayStatus = do
       _ -> (s, s)
   case oldStatus of
     Open _ -> do
-      modifyMVar (connectionMapMVar $ connClient conn) removeMe
+      modifyMVar (epConnectionMapMVar $ connClient conn) removeMe
       maybe
         (return ())
         ((queueFrame conn ASAP =<<) . goAwayFrame conn)
