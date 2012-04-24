@@ -1,0 +1,114 @@
+Here are the differences, frame by frame:
+
+DATA
+
+No change between SPDY 2 and SPDY 3.
+
+
+SYN_STREAM
+
+- SPDY 2: two bit Priority field with 14 bits of unused space
+
+- SPDY 3:
+
+  - Priority is 3 bits instead of 2
+
+  - new 8-bit Slot field occupies bottom byte of what was unused space
+
+There are also changes in header blocks. See the section on that.
+
+SYN_REPLY
+
+- in SPDY 2, there are 16 bits of unused space between the Stream-ID
+  field and the header block. This unused space is gone in SPDY 3
+
+RST_STREAM
+
+This frame is the same, except that there are more flags in SPDY
+3. The new flags are STREAM_IN_USE, STREAM_ALREADY_CLOSED,
+INVALID_CREDENTIALS, and FRAME_TOO_LARGE, that is, flag bits 8 through
+11.
+
+SETTINGS
+
+The shape of the frame is the same, but in the ID-value pairs, the
+order of the flags and the ID are reversed:
+
+- in SPDY 2, the 24 bits of the ID come first, followed by 8 bits of
+  flags
+
+- in SPDY 3, the 8 bits of flags come first, followed by the 24 bits
+  of the ID
+
+- in SPDY 3, there is one more setting,
+  SETTINGS_CLIENT_CERTIFICATE_VECTOR_SIZE (value 8)
+
+NOOP
+
+This frame was removed in SPDY 3.
+
+PING
+
+This frame is unchanged.
+
+GOAWAY
+
+- in SPDY 2, this frame contains just the last good stream ID
+
+- in SPDY 3, this frame contains a last good stream ID and a 32-bit
+  status code
+
+HEADERS
+
+- in SPDY 2, there is 16 bits of unused space between the stream ID
+  and the header block
+
+- in SPDY 3, this unused space is gone, removed entirely from the
+  frame
+
+WINDOW_UPDATE
+
+- in SPDY 2, this frame was originally part of the spec, but the
+  official version 2 spec says that the frame was never implemented
+  (i.e. flow control is not part of draft 2 of the spec). Effectively,
+  this frame is not present in SPDY 2.
+
+CREDENTIAL
+
+- this frame is not present in SPDY 2
+
+
+Changes in the header block
+---------------------------
+
+The number of header pairs, and the lengths of header names and header
+values, were 16-bit unsigned integers in SPDY 2. They are 32-bit
+unsigned integers in SPDY 3.
+
+SPDY 3 says that names must be in the US-ASCII character encoding; it
+says nothing about values except that a value may not contain the zero
+byte, since it is used as a separator between distinct strings. SPDY 2
+says that all strings should be utf8 encoded and should not contain a
+zero byte.
+
+Changes in header compression
+-----------------------------
+
+The prescribed compression dictionary is (very) different between SPDY
+2 and SPDY 3.
+
+Changes in HTTP layering
+------------------------
+
+In SPDY 2, the special header names associated with a request are
+'method', 'scheme', 'url', and 'version'. In SPDY 3, the headers are
+':method', ':path', ':version', ':host', ':scheme'. The ':path' header
+holds the absolute url path for the request, the same as the
+(misnamed) 'url' header in SPDY 2. Note that all the header names in
+SPDY 3 are prefixed with colons, which are not legal in HTTP
+headers. This is intended to prevent name clashes.
+
+For responses, the required special headers were called 'status' and
+'version' in SPDY 2. They are called ':status' and ':version' in SPDY
+3.
+
