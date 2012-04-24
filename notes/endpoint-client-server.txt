@@ -1,0 +1,59 @@
+Endpoints, Clients, and Servers
+-------------------------------
+
+Here's the current Client type:
+
+data Client =
+  Client { options :: ClientOptions,
+           -- ^ Options for this client.
+           connectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
+           -- ^ Connections by key.
+           clientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+           -- ^ Creates input frame handlers for a connection.
+         }
+
+data ClientOptions =
+  ClientOptions { coptConnectionTimeoutSeconds :: Maybe Int
+                  -- ^ The number of seconds without any activity before
+                  -- closing a connection. If 'Nothing', there is no
+                  -- timeout.
+                , coptConnectionStyle :: ConnectionStyle
+                  -- ^ The kind of network connection to establish
+                  -- with remote endpoints. A single client supports
+                  -- only one style of connection.
+                }
+
+Most of the fields in the current Client type are also reasonable in
+an EndPoint type:
+
+- the connection map
+
+- the function for creating input handlers
+
+- the timeout option in the ClientOptions type (even though we don't
+  currently do anything with it)
+
+It's not clear that the ConnectionStyle option is relevant to a
+server. Well, it is in the sense that in a server we have to have some
+thread that generates new Connections by accepting incoming connection
+requests from clients. However, the 'CsCustom' variant of
+ConnectionStyle doesn't apply on the server, since we don't create new
+Connections from ConnectionKeys on the server side.
+
+Obviously, we need to do a little reorganization and isolate stuff
+that is common. But I can see a couple of ways to do this:
+
+1. Create an EndPoint type that includes the common stuff, and then
+   the Client and Server types could contain EndPoints in fields.
+
+2. Create an EndPoint type class whose methods capture the common
+   stuff, and make the Client and Server types instances of the
+   EndPoint class. That is, Client and Server share an internal
+   interface.
+
+Either technique could certainly work. I don't really envision having
+more types of endpoints than a client and a server, so perhaps a type
+class is an abuse of type classes. It sounds like the most
+straightforward thing is to extract an EndPoint type in the Client
+module, reworking the code to make sure that we cleanly separate stuff
+that is specific to a Client.
