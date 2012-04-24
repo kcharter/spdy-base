@@ -98,19 +98,28 @@ defaultClientOptions =
 data Client =
   Client { options :: ClientOptions,
            -- ^ Options for this client.
-           epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
-           -- ^ Connections by key.
-           epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
-           -- ^ Creates input frame handlers for a connection.
+           endpoint :: Endpoint
+           -- ^ The endpoint underlying this client.
          }
+
+-- | A SPDY endpoint.
+data Endpoint =
+  EndPoint {
+    epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
+    -- ^ Connections by key.
+    epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+    -- ^ Creates input frame handlers for a connection.
+    }
 
 -- | Allocates a new client.
 client :: ClientOptions -> IO Client
 client opts = do
   cmapMVar <- newMVar DM.empty
   return $ Client { options = opts,
-                    epConnectionMapMVar = cmapMVar,
-                    epInputFrameHandlers = stdClientInputFrameHandlers
+                    endpoint = EndPoint {
+                      epConnectionMapMVar = cmapMVar,
+                      epInputFrameHandlers = stdClientInputFrameHandlers
+                      }
                   }
 
 -- | Estimates the round-trip time for a connection by measuring the
@@ -389,7 +398,7 @@ serializeFrame conn = frameToByteString (connDeflate conn)
 -- | Obtains a connection, creating one if necessary.
 getConnection :: Client -> ConnectionKey -> IO Connection
 getConnection client cKey = do
-  modifyMVar (epConnectionMapMVar client) $ \cm ->
+  modifyMVar (epConnectionMapMVar $ endpoint client) $ \cm ->
     maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
       where addConnection cm = do
               nc <- toNetworkConnection (coptConnectionStyle $ options client) cKey
@@ -458,7 +467,7 @@ setupConnection client cKey nc =
      -- TODO: record the thread IDs in an IORef in the connection,
      -- so we can forcibly terminate the reading thread should it
      -- be necessary
-     forkIO (readFrames conn (epInputFrameHandlers client conn))
+     forkIO (readFrames conn (epInputFrameHandlers (endpoint client) conn))
      forkIO (doOutgoingJobs conn)
      return conn
 
@@ -472,7 +481,7 @@ closeConnection conn maybeGoAwayStatus = do
       _ -> (s, s)
   case oldStatus of
     Open _ -> do
-      modifyMVar (epConnectionMapMVar $ connClient conn) removeMe
+      modifyMVar (epConnectionMapMVar $ endpoint $ connClient conn) removeMe
       maybe
         (return ())
         ((queueFrame conn ASAP =<<) . goAwayFrame conn)
