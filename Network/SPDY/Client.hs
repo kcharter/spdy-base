@@ -34,7 +34,6 @@ import qualified Data.ByteString.Char8 as C8
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
 import Data.Maybe (isNothing)
-import Data.String (IsString)
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
 import Network (HostName, PortID(..), connectTo)
@@ -60,6 +59,7 @@ import Network.SPDY.Deserialize
 import Network.SPDY.NetworkConnection (NetworkConnection)
 import qualified Network.SPDY.NetworkConnection as NC
 import Network.SPDY.Serialize
+import Network.SPDY.Url
 
 -- * Client API
 
@@ -275,20 +275,6 @@ toConnectParams :: ConnectionKey -> (HostName, PortID)
 toConnectParams (OriginKey origin) = (toHostName (originHost origin), PortNumber (originPort origin))
 toConnectParams (IP4PortKey ha pn) = (show ha, PortNumber pn)
 toConnectParams (IP6PortKey ha pn) = (show ha, PortNumber pn)
-
--- | A web origin, as defined in RFC 6454.
-data Origin = Origin { originScheme :: Scheme
-                     , originHost :: Host
-                     , originPort :: PortNumber } deriving (Eq, Ord, Show)
-
--- | The scheme part of a URI.
-newtype Scheme = Scheme String deriving (Eq, Ord, Show, IsString)
-
--- | The host part of a URI.
-newtype Host = Host String deriving (Eq, Ord, Show, IsString)
-
-toHostName :: Host -> HostName
-toHostName (Host host) = host
 
 -- | A number of milliseconds.
 newtype Milliseconds = Milliseconds Int deriving (Eq, Ord, Show, Num, Real, Enum, Integral)

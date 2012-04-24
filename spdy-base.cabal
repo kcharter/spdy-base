@@ -31,7 +31,8 @@ Library
                        Network.SPDY.Deserialize,
                        Network.SPDY.NetworkConnection,
                        Network.SPDY.Serialize,
-                       Network.SPDY.Client
+                       Network.SPDY.Client,
+                       Network.SPDY.Url
   Other-modules:       Network.SPDY.Internal.Deserialize,
                        Network.SPDY.Internal.PriorityChan,
                        Network.SPDY.Internal.Serialize,
