@@ -4,6 +4,7 @@
 module Network.SPDY.Endpoint
        ( -- * Creating endpoints
          Endpoint,
+         EndpointOptions(..),
          endpoint,
          -- * Connections
          ConnectionKey(..),
@@ -66,22 +67,37 @@ import qualified Network.SPDY.NetworkConnection as NC
 import Network.SPDY.Serialize
 import Network.SPDY.Url
 
--- | A SPDY endpoint.
+-- | A SPDY endpoint, i.e. a client or server. This type captures
+-- functionality that is common to clients and servers.
 data Endpoint =
   EndPoint {
     epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
     -- ^ Connections by key.
+    epFirstPingID :: PingID,
+    -- ^ The first ping ID on a new connection.
     epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
     -- ^ Creates input frame handlers for a connection.
     }
 
--- | Allocates a new endpoint.
-endpoint :: (Connection -> FrameHandlers (IO ())) -> IO Endpoint
-endpoint handlers = do
+-- | Options for creating new endpoints.
+data EndpointOptions =
+  EndpointOptions {
+    epOptsFirstPingID :: PingID,
+    -- ^ The first ping ID to issue. For a client, this should be odd,
+    -- and for a server even.
+    epOptsInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+    -- ^ A function to create handlers for frames from the remote
+    -- endpoint on the other end of a connection.
+    }
+
+-- | Creates a new endpoint.
+endpoint :: EndpointOptions -> IO Endpoint
+endpoint options = do
   cmapMVar <- newMVar DM.empty
   return $ EndPoint {
     epConnectionMapMVar = cmapMVar,
-    epInputFrameHandlers = handlers
+    epFirstPingID = epOptsFirstPingID options,
+    epInputFrameHandlers = epOptsInputFrameHandlers options
     }
 
 -- | Options for initiating streams.
@@ -272,7 +288,7 @@ setupConnection ep cKey nc =
   do keysRef <- newIORef [cKey]
      now <- getCurrentTime
      lifeCycleStateRef <- newIORef (Open now)
-     pingIDRef <- newIORef (PingID 1)
+     pingIDRef <- newIORef (epFirstPingID ep)
      nextStreamIDRef <- newIORef (StreamID 1)
      lastStreamIDRef <- newIORef (StreamID 0)
      pingHandlersRef <- newIORef DM.empty

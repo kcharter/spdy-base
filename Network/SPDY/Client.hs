@@ -85,7 +85,10 @@ data Client =
 -- | Allocates a new client.
 client :: ClientOptions -> IO Client
 client opts = do
-  ep <- endpoint stdClientInputFrameHandlers
+  ep <- endpoint $ EndpointOptions {
+    epOptsFirstPingID = PingID 1,
+    epOptsInputFrameHandlers = stdClientInputFrameHandlers
+    }
   return $ Client { clientOptions = opts,
                     clientEndpoint = ep
                   }
