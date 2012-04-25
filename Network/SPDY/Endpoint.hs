@@ -4,7 +4,7 @@
 module Network.SPDY.Endpoint
        ( -- * Creating endpoints
          Endpoint,
-         mkEndpoint,
+         endpoint,
          -- * Connections
          ConnectionKey(..),
          toConnectParams,
@@ -76,8 +76,8 @@ data Endpoint =
     }
 
 -- | Allocates a new endpoint.
-mkEndpoint :: (Connection -> FrameHandlers (IO ())) -> IO Endpoint
-mkEndpoint handlers = do
+endpoint :: (Connection -> FrameHandlers (IO ())) -> IO Endpoint
+endpoint handlers = do
   cmapMVar <- newMVar DM.empty
   return $ EndPoint {
     epConnectionMapMVar = cmapMVar,

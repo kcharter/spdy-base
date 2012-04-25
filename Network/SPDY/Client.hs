@@ -85,7 +85,7 @@ data Client =
 -- | Allocates a new client.
 client :: ClientOptions -> IO Client
 client opts = do
-  ep <- mkEndpoint stdClientInputFrameHandlers
+  ep <- endpoint stdClientInputFrameHandlers
   return $ Client { clientOptions = opts,
                     clientEndpoint = ep
                   }
