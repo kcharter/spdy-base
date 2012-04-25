@@ -15,7 +15,7 @@ module Network.SPDY.Endpoint
          installPingHandler,
          removePingHandler,
          -- * Flow control
-         updateWindow',
+         sendWindowUpdate,
          -- * Streams
          StreamOptions(..),
          defaultStreamOptions,
@@ -116,8 +116,10 @@ defaultStreamOptions = StreamOptions {
   streamOptsDataConsumer = return . maybe 0 (fromIntegral . B.length)
   }
 
-updateWindow' :: Connection -> Stream -> DeltaWindowSize -> IO ()
-updateWindow' conn s dws =
+-- | Sends a WINDOW_UPDATE frame for a given stream on a given
+-- connection.
+sendWindowUpdate :: Connection -> Stream -> DeltaWindowSize -> IO ()
+sendWindowUpdate conn s dws =
   when (dws > 0) $ do
     let sprio = (StreamPriority $ ssPriority s)
         sid = ssStreamID s

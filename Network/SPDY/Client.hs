@@ -193,7 +193,7 @@ updateWindow c cKey sid dws = do
   conn <- getConnection c cKey
   lookupStream conn sid >>=
     (maybe (return ()) $ \s ->
-      updateWindow' conn s dws)
+      sendWindowUpdate conn s dws)
 
 
 -- * Supporting data types
@@ -255,7 +255,7 @@ stdClientInputFrameHandlers conn =
                (\s -> do
                    let isLast = isSet DataFlagFin flags
                    dws <- ssDataConsumer s (Just bytes)
-                   if isLast then endOfStream s else updateWindow' conn s dws)
+                   if isLast then endOfStream s else sendWindowUpdate conn s dws)
           forPingFrame _ p =
             let thePingID = pingID p
             in if isClientInitiated thePingID
