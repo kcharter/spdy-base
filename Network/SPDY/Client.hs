@@ -76,9 +76,9 @@ defaultClientOptions =
 
 -- | A low-level SPDY client.
 data Client =
-  Client { options :: ClientOptions,
+  Client { clientOptions :: ClientOptions,
            -- ^ Options for this client.
-           endpoint :: Endpoint
+           clientEndpoint :: Endpoint
            -- ^ The endpoint underlying this client.
          }
 
@@ -86,8 +86,8 @@ data Client =
 client :: ClientOptions -> IO Client
 client opts = do
   ep <- mkEndpoint stdClientInputFrameHandlers
-  return $ Client { options = opts,
-                    endpoint = ep
+  return $ Client { clientOptions = opts,
+                    clientEndpoint = ep
                   }
 
 -- | Estimates the round-trip time for a connection by measuring the
@@ -202,9 +202,9 @@ updateWindow c cKey sid dws = do
 -- | Obtains a connection, creating one if necessary.
 getConnection :: Client -> ConnectionKey -> IO Connection
 getConnection client cKey = do
-  getOrCreateConnection (endpoint client) cKey mkConnection
+  getOrCreateConnection (clientEndpoint client) cKey mkConnection
     where mkConnection =
-            toNetworkConnection (coptConnectionStyle $ options client)
+            toNetworkConnection (coptConnectionStyle $ clientOptions client)
 
 -- | Establishes a low-level network connection to the identified
 -- remote endpoint.
