@@ -9,6 +9,7 @@ module Network.SPDY.Endpoint
          -- * Connections
          ConnectionKey(..),
          toConnectParams,
+         fromSockAddr,
          Connection,
          getOrCreateConnection,
          addConnection,
@@ -53,7 +54,7 @@ import qualified Data.Map as DM
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
 import Network (HostName, PortID(..))
-import Network.Socket (HostAddress, HostAddress6, PortNumber)
+import Network.Socket (HostAddress, HostAddress6, PortNumber, SockAddr(..))
 import System.IO (hPutStrLn, stderr)
 import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
@@ -161,8 +162,10 @@ data ConnectionKey =
   -- ^ A key based on web origin.
   IP4PortKey HostAddress PortNumber |
   -- ^ A key based on an IP v4 host address and port.
-  IP6PortKey HostAddress6 PortNumber
+  IP6PortKey HostAddress6 PortNumber |
   -- ^ A key based on an IP v6 host address and port.
+  UnixSockKey String
+  -- ^ A key based on a unix socket name.
   deriving (Eq, Ord, Show)
 
 -- | Converts a 'ConnectionKey' to a host name and port ID suitable for 'connectTo'.
@@ -170,6 +173,14 @@ toConnectParams :: ConnectionKey -> (HostName, PortID)
 toConnectParams (OriginKey origin) = (toHostName (originHost origin), PortNumber (originPort origin))
 toConnectParams (IP4PortKey ha pn) = (show ha, PortNumber pn)
 toConnectParams (IP6PortKey ha pn) = (show ha, PortNumber pn)
+-- TODO should we change the return type to (Maybe (HostName, PortID))?
+toConnectParams (UnixSockKey _) = error "Sorry, can't create connection parameters from a unix socket name."
+
+-- | Converts a 'SockAddr' to a 'ConnectionKey'.
+fromSockAddr :: SockAddr -> ConnectionKey
+fromSockAddr (SockAddrInet pn ha) = IP4PortKey ha pn
+fromSockAddr (SockAddrInet6 pn _ ha6 _) = IP6PortKey ha6 pn
+fromSockAddr (SockAddrUnix name) = UnixSockKey name
 
 -- | A number of milliseconds.
 newtype Milliseconds = Milliseconds Int deriving (Eq, Ord, Show, Num, Real, Enum, Integral)
