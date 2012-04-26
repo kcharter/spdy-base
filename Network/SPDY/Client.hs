@@ -87,6 +87,7 @@ client :: ClientOptions -> IO Client
 client opts = do
   ep <- endpoint $ EndpointOptions {
     epOptsFirstPingID = PingID 1,
+    epOptsFirstStreamID = StreamID 1,
     epOptsInputFrameHandlers = stdClientInputFrameHandlers
     }
   return $ Client { clientOptions = opts,

@@ -75,6 +75,8 @@ data Endpoint =
     -- ^ Connections by key.
     epFirstPingID :: PingID,
     -- ^ The first ping ID on a new connection.
+    epFirstStreamID :: StreamID,
+    -- ^ The first stream ID on a new connection.
     epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
     -- ^ Creates input frame handlers for a connection.
     }
@@ -85,6 +87,10 @@ data EndpointOptions =
     epOptsFirstPingID :: PingID,
     -- ^ The first ping ID to issue. For a client, this should be odd,
     -- and for a server even.
+    epOptsFirstStreamID :: StreamID,
+    -- ^ The first stream ID to issue on a connection. For a client,
+    -- this must be odd, and for a server it must be even and
+    -- positive.
     epOptsInputFrameHandlers :: Connection -> FrameHandlers (IO ())
     -- ^ A function to create handlers for frames from the remote
     -- endpoint on the other end of a connection.
@@ -97,6 +103,7 @@ endpoint options = do
   return $ EndPoint {
     epConnectionMapMVar = cmapMVar,
     epFirstPingID = epOptsFirstPingID options,
+    epFirstStreamID = epOptsFirstStreamID options,
     epInputFrameHandlers = epOptsInputFrameHandlers options
     }
 
@@ -289,7 +296,7 @@ setupConnection ep cKey nc =
      now <- getCurrentTime
      lifeCycleStateRef <- newIORef (Open now)
      pingIDRef <- newIORef (epFirstPingID ep)
-     nextStreamIDRef <- newIORef (StreamID 1)
+     nextStreamIDRef <- newIORef (epFirstStreamID ep)
      lastStreamIDRef <- newIORef (StreamID 0)
      pingHandlersRef <- newIORef DM.empty
      streamsRef <- newIORef DM.empty
