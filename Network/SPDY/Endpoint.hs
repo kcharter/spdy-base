@@ -11,6 +11,7 @@ module Network.SPDY.Endpoint
          toConnectParams,
          Connection,
          getOrCreateConnection,
+         addConnection,
          -- * Pings
          pingRemote,
          PingOptions(..),
@@ -339,11 +340,18 @@ getOrCreateConnection :: Endpoint
                          -> IO Connection
 getOrCreateConnection ep cKey mkConnection =
   modifyMVar (epConnectionMapMVar ep) $ \cm ->
-    maybe (addConnection cm) (return . (cm,)) $ DM.lookup cKey cm
-      where addConnection cm = do
+    maybe (createAndAddConnection cm) (return . (cm,)) $ DM.lookup cKey cm
+      where createAndAddConnection cm = do
               nc <- mkConnection cKey
               c <- setupConnection ep cKey nc
               return (DM.insert cKey c cm, c)
+
+-- | Adds a connection under a given connection key.
+addConnection :: Endpoint -> ConnectionKey -> NetworkConnection -> IO Connection
+addConnection ep cKey nc =
+  modifyMVar (epConnectionMapMVar ep) $ \cm -> do
+    c <- setupConnection ep cKey nc
+    return (DM.insert cKey c cm, c)
 
 -- | Creates and installs a connection for a given connection key and the network connection.
 setupConnection :: Endpoint -> ConnectionKey -> NetworkConnection -> IO Connection
