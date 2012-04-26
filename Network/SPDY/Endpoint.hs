@@ -85,8 +85,8 @@ data Endpoint =
 data EndpointOptions =
   EndpointOptions {
     epOptsFirstPingID :: PingID,
-    -- ^ The first ping ID to issue. For a client, this should be odd,
-    -- and for a server even.
+    -- ^ The first ping ID to issue on a connection. For a client,
+    -- this must be odd, and for a server even.
     epOptsFirstStreamID :: StreamID,
     -- ^ The first stream ID to issue on a connection. For a client,
     -- this must be odd, and for a server it must be even and
