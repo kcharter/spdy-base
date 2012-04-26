@@ -12,6 +12,10 @@ module Network.SPDY.Endpoint
          Connection,
          getOrCreateConnection,
          -- * Pings and ping handlers
+         pingRemote,
+         PingOptions(..),
+         defaultPingOptions,
+         PingResult(..),
          Milliseconds,
          installPingHandler,
          removePingHandler,
@@ -37,19 +41,20 @@ module Network.SPDY.Endpoint
        where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
-import Control.Exception (throw)
+import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, putMVar, takeMVar)
+import Control.Exception (throw, finally)
 import Control.Monad (when)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import qualified Data.Map as DM
-import Data.Time (UTCTime, getCurrentTime)
+import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Tuple (swap)
 import Network (HostName, PortID(..))
 import Network.Socket (HostAddress, HostAddress6, PortNumber)
 import System.IO (hPutStrLn, stderr)
+import System.Timeout (timeout)
 import Codec.Zlib (initInflateWithDictionary, initDeflateWithDictionary)
 
 import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
@@ -242,6 +247,49 @@ data Stream =
            -- available from the remote endpoint. 'Nothing' signals
            -- that there is no more data.
          }
+
+-- | Estimates the round-trip time on a connection by measuring the
+-- time to send a SPDY PING frame and receive the response from the
+-- remote endpoint.
+pingRemote :: PingOptions -> Connection -> IO PingResult
+pingRemote opts conn = do
+  (thePingID, frame) <- pingFrame conn
+  endTimeMVar <- newEmptyMVar
+  installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
+  finally
+    (do startTime <- getCurrentTime
+        queueFrame conn ASAP frame
+        queueFlush conn ASAP
+        maybe (timeoutMillis startTime) return =<<
+          timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar))
+    (removePingHandler conn thePingID)
+  where timeoutMillis startTime =
+          (PingTimeout . millisSince startTime) `fmap` getCurrentTime
+        responseMillis startTime endTimeMVar =
+          (PingResponse . millisSince startTime) `fmap` takeMVar endTimeMVar
+        millisSince startTime endTime =
+          fromIntegral $ round $ 1000 * toRational (diffUTCTime endTime startTime)
+        micros millis = 1000 * fromIntegral millis
+
+-- | Options for a PING request.
+data PingOptions = PingOptions {
+  pingOptsTimeout :: Milliseconds
+  -- ^ The number of milliseconds to wait for a response from the
+  -- remote end before giving up.
+  } deriving (Show)
+
+-- | The default set of PING options. Includes a timeout of 30 seconds.
+defaultPingOptions :: PingOptions
+defaultPingOptions = PingOptions { pingOptsTimeout = 30000 }
+
+-- | The possible results of a PING request.
+data PingResult =
+  PingResponse Milliseconds |
+  -- ^ The remote end responded in the given number of milliseconds.
+  PingTimeout Milliseconds
+  -- ^ We gave up waiting for the remote end after the given number of milliseconds.
+  deriving (Eq, Show)
+
 
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
 installPingHandler conn pingID handler =

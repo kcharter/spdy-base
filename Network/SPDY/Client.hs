@@ -20,15 +20,11 @@ module Network.SPDY.Client (ClientOptions(..),
                             Milliseconds
                             ) where
 
-import Control.Concurrent.MVar (newEmptyMVar, takeMVar, putMVar)
-import Control.Exception (finally)
 import Control.Monad (when)
 import qualified Data.ByteString.Char8 as C8
 import Data.Maybe (isNothing)
-import Data.Time (getCurrentTime, diffUTCTime)
 import Network (connectTo)
 import System.IO (hPutStrLn, stderr)
-import System.Timeout (timeout)
 
 import qualified Crypto.Random as CR
 import qualified Network.TLS as TLS
@@ -98,44 +94,8 @@ client opts = do
 -- time to send a SPDY PING frame and receive the response from the
 -- server.
 ping :: PingOptions -> Client -> ConnectionKey -> IO PingResult
-ping opts client cKey = do
-  conn <- getConnection client cKey
-  (thePingID, frame) <- pingFrame conn
-  endTimeMVar <- newEmptyMVar
-  installPingHandler conn thePingID (getCurrentTime >>= putMVar endTimeMVar)
-  finally
-    (do startTime <- getCurrentTime
-        queueFrame conn ASAP frame
-        queueFlush conn ASAP
-        maybe (timeoutMillis startTime) return =<<
-          timeout (micros $ pingOptsTimeout opts) (responseMillis startTime endTimeMVar))
-    (removePingHandler conn thePingID)
-  where timeoutMillis startTime =
-          (PingTimeout . millisSince startTime) `fmap` getCurrentTime
-        responseMillis startTime endTimeMVar =
-          (PingResponse . millisSince startTime) `fmap` takeMVar endTimeMVar
-        millisSince startTime endTime =
-          fromIntegral $ round $ 1000 * toRational (diffUTCTime endTime startTime)
-        micros millis = 1000 * fromIntegral millis
-
--- | Options for a PING request.
-data PingOptions = PingOptions {
-  pingOptsTimeout :: Milliseconds
-  -- ^ The number of milliseconds to wait for a response from the
-  -- remote end before giving up.
-  } deriving (Show)
-
--- | The default set of PING options. Includes a timeout of 30 seconds.
-defaultPingOptions :: PingOptions
-defaultPingOptions = PingOptions { pingOptsTimeout = 30000 }
-
--- | The possible results of a PING request.
-data PingResult =
-  PingResponse Milliseconds |
-  -- ^ The remote end responded in the given number of milliseconds.
-  PingTimeout Milliseconds
-  -- ^ We gave up waiting for the remote end after the given number of milliseconds.
-  deriving (Eq, Show)
+ping opts client cKey =
+  getConnection client cKey >>= pingRemote opts
 
 -- | Initiate a stream.
 initiateStream :: Client
