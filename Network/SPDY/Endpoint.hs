@@ -75,7 +75,7 @@ import Network.SPDY.Url
 -- | A SPDY endpoint, i.e. a client or server. This type captures
 -- functionality that is common to clients and servers.
 data Endpoint =
-  EndPoint {
+  Endpoint {
     epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
     -- ^ Connections by key.
     epFirstPingID :: PingID,
@@ -105,7 +105,7 @@ data EndpointOptions =
 endpoint :: EndpointOptions -> IO Endpoint
 endpoint options = do
   cmapMVar <- newMVar DM.empty
-  return $ EndPoint {
+  return $ Endpoint {
     epConnectionMapMVar = cmapMVar,
     epFirstPingID = epOptsFirstPingID options,
     epFirstStreamID = epOptsFirstStreamID options,
