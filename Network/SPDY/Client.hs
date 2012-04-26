@@ -205,10 +205,10 @@ toNetworkConnection cs cKey =
 -- | A set of input frame handlers for a client endpoint.
 stdClientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
 stdClientInputFrameHandlers conn =
-  defaultIOFrameHandlers { handleDataFrame = forDataFrame
-                         , handlePingFrame = forPingFrame
-                         , handleSynReplyFrame = forSynReplyFrame
-                         , handleHeadersFrame = forHeadersFrame }
+  (defaultEndpointInputFrameHandlers conn)
+    { handleDataFrame = forDataFrame
+    , handleSynReplyFrame = forSynReplyFrame
+    , handleHeadersFrame = forHeadersFrame }
     where forDataFrame d =
             let sid = streamID d
                 flags = dataFlags d
@@ -220,14 +220,6 @@ stdClientInputFrameHandlers conn =
                    let isLast = isSet DataFlagFin flags
                    dws <- ssDataConsumer s (Just bytes)
                    if isLast then endOfStream s else sendWindowUpdate conn s dws)
-          forPingFrame _ p =
-            let thePingID = pingID p
-            in if isClientInitiated thePingID
-               then removePingHandler conn thePingID >>= maybe (return ()) id
-               else
-                 -- we echo the exact same frame as the response
-                 queueFrame conn ASAP (controlFrame conn $ APingFrame p) >>
-                 queueFlush conn ASAP
           forSynReplyFrame _ sr =
             let flags = synReplyFlags sr
                 sid = synReplyNewStreamID sr

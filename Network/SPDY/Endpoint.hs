@@ -28,6 +28,8 @@ module Network.SPDY.Endpoint
          lookupStream,
          addStream,
          removeStream,
+         -- * Input frame handlers
+         defaultEndpointInputFrameHandlers,
          -- * Creating frames
          pingFrame,
          synStreamFrame,
@@ -290,6 +292,14 @@ data PingResult =
   -- ^ We gave up waiting for the remote end after the given number of milliseconds.
   deriving (Eq, Show)
 
+-- | Indicates whether a ping ID could have been initiated by this
+-- endpoint. That is, whether it has the same parity as the first ping
+-- ID for this endpoint.
+isInitiatedHere :: Endpoint -> PingID -> Bool
+isInitiatedHere ep pid =
+  isClientInitiated firstPid && isClientInitiated pid ||
+  isServerInitiated firstPid && isServerInitiated pid
+  where firstPid = epFirstPingID ep
 
 installPingHandler :: Connection -> PingID -> IO () -> IO ()
 installPingHandler conn pingID handler =
@@ -484,6 +494,21 @@ readFrames conn handlers = readFrames' B.empty
           logErr $ "read frame:\n" ++ show frame
           handleFrame handlers frame
         logErr = logMessage conn
+
+-- | A set of default input frame handlers for an endpoint. Handles
+-- PING frames in particular.
+defaultEndpointInputFrameHandlers :: Connection -> FrameHandlers (IO ())
+defaultEndpointInputFrameHandlers conn =
+  defaultIOFrameHandlers {
+    handlePingFrame = \_ p ->
+     let thePingID = pingID p
+     in if isInitiatedHere (connEndpoint conn) thePingID
+        then removePingHandler conn thePingID >>= maybe (return ()) id
+        else
+          -- we echo the exact same frame as the response
+          queueFrame conn ASAP (controlFrame conn $ APingFrame p) >>
+          queueFlush conn ASAP
+    }
 
 -- | Sends an error message to the logger for a connection.
 logMessage :: Connection -> String -> IO ()
