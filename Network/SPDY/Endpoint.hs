@@ -11,14 +11,12 @@ module Network.SPDY.Endpoint
          toConnectParams,
          Connection,
          getOrCreateConnection,
-         -- * Pings and ping handlers
+         -- * Pings
          pingRemote,
          PingOptions(..),
          defaultPingOptions,
          PingResult(..),
          Milliseconds,
-         installPingHandler,
-         removePingHandler,
          -- * Flow control
          sendWindowUpdate,
          -- * Streams
