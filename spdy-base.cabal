@@ -32,6 +32,7 @@ Library
                        Network.SPDY.Endpoint,
                        Network.SPDY.NetworkConnection,
                        Network.SPDY.Serialize,
+                       Network.SPDY.Server,
                        Network.SPDY.Client,
                        Network.SPDY.Url
   Other-modules:       Network.SPDY.Internal.Deserialize,
@@ -42,6 +43,7 @@ Library
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
                        bytestring >= 0.9 && < 0.10,
+                       certificate >= 1.1.1 && < 2,
                        containers >= 0.4 && < 1,
                        crypto-api >= 0.10 && < 1,
                        fingertree >= 0.0.1 && < 1,
@@ -68,6 +70,7 @@ Test-Suite tests
                         base >= 3 && < 5,
                         blaze-builder >= 0.3 && < 1,
                         bytestring >= 0.9 && < 0.10,
+                        certificate >= 1.1.1 && < 2,
                         containers >= 0.4 && < 1,
                         crypto-api >= 0.10 && < 1,
                         fingertree >= 0.0.1 && < 1,

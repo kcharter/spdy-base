@@ -4,7 +4,7 @@
 
 GHC=ghc
 GHC_FLAGS=-odir tmp -hidir tmp -O -package-conf cabal-dev/packages-7.0.4.conf -hide-package monads-tf
-PROGS=sping sget sget-prof tls-server tls-client
+PROGS=sping sget sget-prof tls-server tls-client sserve
 
 all: $(PROGS)
 
@@ -22,6 +22,9 @@ tls-server: tls-server.hs
 
 tls-client: tls-client.hs
 	$(GHC) $(GHC_FLAGS) --make tls-client -main-is TlsClient -o tls-client
+
+sserve: SServe.hs
+	$(GHC) $(GHC_FLAGS) --make SServe -main-is SServe -o sserve
 
 clean:
 	rm -rf $(PROGS) tmp
