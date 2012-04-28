@@ -1,0 +1,50 @@
+A server needs a way to respond to a SYN_STREAM. Based on
+
+- the headers in the SYN_STREAM, and
+
+- perhaps data from incoming frames
+
+something needs to
+
+- generate a set of response headers
+
+- generate a series of data chunks for the response
+
+I think that the simplest type that might work looks like this:
+
+  [(HeaderName, HeaderValue)
+  -> IO (Maybe ByteString)
+  -> IO ([(HeaderName, HeaderValue)], IO (Maybe ByteString))
+
+Here, the values of type
+
+  IO (Maybe ByteString)
+
+are IO actions that either fetch the next chunk of data, or say that
+there is no more data to be had. On the input, this IO action yields
+data from a request body; in the output, it yields data for the
+response body. We could take a page out of attoparsec's book and use
+an empty byte string to represent end-of-input, which would simplify
+the type slightly.
+
+One problem with this is the type does not account for the fact that
+HEADER frames could arrive from the client for the same stream. This
+suggests that we also need actions that return more headers, and that
+the type should really be:
+
+  [(HeaderName, HeaderValue)]
+  -> IO (Maybe ByteString)
+  -> IO (Maybe [(HeaderName, HeaderValue)])
+  -> IO ([(HeaderName, HeaderValue)],
+         IO (Maybe [(HeaderName, HeaderValue)]),
+         IO (Maybe ByteString))
+
+In the result, the header list is for the SYN_REPLY frame that answers
+the SYN_STREAM. Subsequent headers read from the IO action will result
+in HEADER frames, and subsequent bytes read from the second IO action
+will result in data frames. The data may need to be split or buffered
+in order to form data frames of an optimal length.
+
+We'll call a function of this type a *request handler*. The server
+options should include a request handler that is used in response to
+all SYN_STREAM frames.
