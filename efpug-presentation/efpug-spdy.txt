@@ -1,0 +1,538 @@
+% SPDY in Haskell
+% Kevin Charter
+% May 1, 2012
+
+# What we'll talk about
+
+- what problem SPDY tries to solve
+
+- the SPDY protocol, and how it works
+
+- spdy-base, a Haskell SPDY implementation in progress
+
+# The problem: the web is too slow
+
+- browsers need multiple connections to fetch resources concurrently,
+  even from same origin
+
+- can't prioritize over concurrent connections
+
+- HTTP headers can be redundant, fat, always uncompressed
+
+# SPDY
+
+- SPeeDY
+
+- a frame-based alternative to HTTP that aims to improve the
+  performance of web browsing
+
+- already enabled on Google servers, in Chromium, Firefox
+
+- if you use Chrome and gmail, you've probably used SPDY instead of
+  HTTP without knowing it
+
+- SPDY 2 deployed; SPDY 3 starting to be; SPDY 4 in works
+
+- <http://dev.chromium.org/spdy>
+
+
+# How SPDY improves over HTTP
+
+- multiplex many streams over one network connection
+
+- stream prioritization
+
+- header compression
+
+- server push
+
+# Client and Server
+
+![client and server](client-server.svg)
+
+# Streams and multiplexing
+
+- connection = a pipe between a client and server + associated state
+
+- a client can fetch many resources using a single connection
+
+- \>= 100 simultaneous streams per connection
+
+- one connection per origin
+
+- if a connection stays active, it can stay up for days
+
+- `chrome://net-internals/#spdy`
+
+# Frames
+
+- one kind of data frame:
+
+~~~
+       DATA
+~~~
+
+- nine kinds of control frames:
+
+~~~
+       SYN_STREAM  SYN_REPLY
+       RST_STREAM  SETTINGS
+       GOAWAY      PING
+       HEADERS     WINDOW_UPDATE
+       CREDENTIAL
+~~~
+
+# Data Frame Structure
+
+~~~
+   +----------------------------------+
+   |0|       Stream-ID (31bits)       |
+   +----------------------------------+
+   | Flags (8)  |  Length (24 bits)   |
+   +----------------------------------+
+   |               Data               |
+   +----------------------------------+
+~~~
+
+# Generic Control Frame Structure
+
+~~~
+   +----------------------------------+
+   |1| Version(15bits) | Type(16bits) |
+   +----------------------------------+
+   | Flags (8)  |  Length (24 bits)   |
+   +----------------------------------+
+   |               Data               |
+   +----------------------------------+
+~~~
+
+# Example Control Frame
+
+~~~
+SYN_STREAM Frame
+
++------------------------------------+
+|1|    version    |         1        |
++------------------------------------+
+|  Flags (8)  |  Length (24 bits)    |
++------------------------------------+
+|X|           Stream-ID (31bits)     |
++------------------------------------+
+|X| Associated-To-Stream-ID (31bits) | <- used in server push
++------------------------------------+
+| Pri|Unused | Slot |                |
++-------------------+                |
+| Header-Block                       | <- compressed count and list of
++------------------------------------+    name-value pairs
+~~~
+
+# Getting a resource
+
+1. client: send `SYN_STREAM` with request headers
+
+2. server: send `SYN_REPLY` with response headers
+
+3. client: send `DATA` frames with request body, `HEADERS` frames for additional request headers
+
+4. server: send `DATA` frames with response body, `HEADERS` frames for
+additional response headers
+
+5. stream ends when each side sends a frame with the `FIN` flag
+
+# Stream prioritization
+
+- client can open concurrent streams for resources on the same page
+
+- streams can be assigned numeric priorities
+
+- a stream's priority can be changed midway through
+
+- for example, might prioritize Javascript and CSS resources over
+  images
+
+# Server push
+
+- server can send client resources before it asks for them
+
+- just like getting a resource, except the roles of client and server
+  are largely reversed
+
+- pushed resources are always associated with a primary resource
+  that was requested by the client
+
+- client must cache pushed resources
+
+- uncertainty over how server should determine what resources to push
+  in addition to a primary resource
+
+- doesn't look like it's widely used yet
+
+# Flow control
+
+- new in SPDY 3
+
+- server assumes a client can only buffer so much data on each stream
+
+- client must tell the server when buffer space is freed up by sending
+  `WINDOW_UPDATE` frames
+
+# Next Protocol Negotiation
+
+- extension of TLS that allows serving SPDY under the covers on the
+  usual https port
+
+- modified TLS handshake
+
+- server advertizes list of supported protocol names (`http/1.1`,
+  `spdy/2`, ...)
+
+- client selects the desired protocol
+
+# Performance measurements
+
+- well, anecdotal evidence anyway
+
+- Google says lab tests show 40% to 60% reduction in page load times
+  for typical pages on typical home broadband connections
+
+- mod_spdy (Apache) anecdotal tests show significant reduction in load
+  time for a sample [world flags
+  page](https://www.modspdy.com/world-flags)
+
+# spdy-base
+
+- SPDY infrastructure for Haskell ...
+
+- and an excuse to do a little network programming
+
+- Daniel Sommermann had proposed a project, but didn't pursue it
+
+- started with goal of frame definitions, serialization and deserialization
+
+- expanded into a client and server too
+
+- long term goal: integrate with Snap, Warp (Yesod)
+
+# Frames
+
+- raw frames and high-level frames
+
+- raw frames have a header, flags, and a byte string payload
+
+- high-level frames transform the payload into interesting content
+
+# Raw Frame Data Types
+
+~~~ {.haskell}
+data RawFrame =
+  RawFrame
+  { frameHeader :: RawFrameHeader
+  , flagsByte :: Word8
+  , payload :: ByteString }
+
+data RawFrameHeader =
+  ControlFrameHeader { controlSpdyVersion :: SPDYVersion
+                     , controlType :: Word16 } |
+  DataFrameHeader { dataStreamID :: StreamID }
+~~~
+
+# High-level Frame Data Types
+
+~~~ {.haskell}
+data Frame =
+  AControlFrame SPDYVersion ControlFrame |
+  ADataFrame DataFrame
+
+data DataFrame =
+  DataFrame { streamID :: StreamID
+            , dataFlags :: Flags DataFlag
+            , dataBytes :: ByteString }
+
+data ControlFrame =
+  ASynStreamFrame SynStreamFrame |
+  ASynReplyFrame SynReplyFrame |
+  ARstStreamFrame RstStreamFrame |
+  ...
+~~~
+
+# A type for each control frame
+
+~~~ {.haskell}
+data SynStreamFrame =
+  SynStreamFrame { synStreamFlags :: Flags SynStreamFlag
+                 , synStreamNewStreamID :: StreamID
+                 , synStreamAssociatedTo :: Maybe StreamID
+                 , synStreamPriority :: Priority
+                 , synStreamSlot :: Slot
+                 , synStreamHeaderBlock :: HeaderBlock }
+
+data SynReplyFrame =
+  SynReplyFrame { synReplyFlags :: Flags SynReplyFlag
+                , synReplyNewStreamID :: StreamID
+                , synReplyHeaderBlock :: HeaderBlock }
+
+...
+~~~
+
+# Flags
+
+- every frame has a flags byte in the same place, but
+
+    - not all frames use it
+
+    - a bit has different interpretations in different frames
+
+- *problem*: how do we guarantee the right flag interpretations in a
+  frame?
+
+- *solution*: use phantom types
+
+# Flags and Phantom Types
+
+~~~ {.haskell}
+newtype Flags f = Flags Word8
+
+class Flag f where
+  bit :: f -> Int
+
+isSet :: Flag f => f -> Flags f -> Bool
+isSet f (Flags w) = testBit w (bit f)
+
+data SynStreamFlag = SynStreamFlagFin | SynStreamFlagUnidirectional
+
+instance Flag SynStreamFlag where
+  bit SynStreamFlagFin = 0
+  bit SynStreamFlagUnidirectional = 1
+
+data SynStreamFrame =
+  SynStreamFrame { synStreamFlags :: Flags SynStreamFlag, ...
+~~~
+
+# Serialization, De-serialization
+
+- use `blaze-builder` for serializing frames to byte strings
+
+- use `attoparsec` for parsing raw frames off the wire, and for
+  converting raw frames to high-level frames
+
+- use `zlib-bindings` for header compression and decompression
+
+- *surprise*: header compression forces serialization and
+  de-serialization into the IO monad
+
+# Serialization and de-serialization interfaces
+
+~~~ {.haskell}
+rawFrameToByteString :: RawFrame -> ByteString
+
+toRawFrame :: Deflate -> Frame -> IO RawFrame
+
+frameToByteString :: Deflate -> Frame -> IO ByteString
+
+
+rawFrameFromByteString :: ByteString -> Either String RawFrame
+
+toFrame :: Inflate -> RawFrame -> IO (Either String Frame)
+~~~
+
+# QuickCheck + test-framework
+
+- QuickCheck tests help ensure consistency between serialization and
+  de-serialization code
+
+- tests for full frames must be in the IO monad
+  (`morallyDubiousIOProperty`)
+
+- *lesson*: the `test-framework` package makes it easier to integrate
+   QuickCheck tests with Cabal's newish test suite support
+
+# Endpoint
+
+- mostly a mapping from connection keys to connections
+
+- connection keys formed from
+
+    - origin (scheme + host + port from URL)
+
+    - IP address + port
+
+- most of the state resides in connections
+
+- pluggable set of handlers for incoming frames
+
+- client, server are specializations that wrap a generic endpoint
+
+# Endpoint Creation
+
+~~~ {.haskell}
+data Endpoint =
+  Endpoint {
+    epConnectionMapMVar :: MVar (DM.Map ConnectionKey Connection),
+    epFirstPingID :: PingID,
+    epFirstStreamID :: StreamID,
+    epInputFrameHandlers :: Connection -> FrameHandlers (IO ()) }
+
+data EndpointOptions =
+  EndpointOptions {
+    epOptsFirstPingID :: PingID,
+    epOptsFirstStreamID :: StreamID,
+    epOptsInputFrameHandlers :: Connection -> FrameHandlers (IO ()) }
+
+endpoint :: EndpointOptions -> IO Endpoint
+~~~
+
+# Connection Data Type
+
+~~~ {.haskell}
+data Connection =
+  Connection {
+    connEndpoint :: Endpoint,
+    connKeys :: IORef [ConnectionKey],
+    connSPDYVersion :: SPDYVersion,
+    connNextPingIDRef :: IORef PingID,
+    connNextStreamIDRef :: IORef StreamID,
+    connLifeCycleState :: IORef ConnectionLifeCycleState,
+    connLastAcceptedStreamID :: IORef StreamID,
+    connNetworkConnection :: NetworkConnection,
+    connDeflate :: Deflate,
+    connInflate :: Inflate,
+    connOutgoing :: PriorityChan OutgoingPriority OutgoingJob,
+    connPingHandlers :: IORef (DM.Map PingID (IO ())),
+    connStreams :: IORef (DM.Map StreamID Stream) }
+~~~
+
+# Client interface
+
+~~~ {.haskell}
+data Client =
+  Client { clientOptions :: ClientOptions
+         , clientEndpoint :: Endpoint }
+
+client :: ClientOptions -> IO Client
+
+ping :: PingOptions -> Client -> ConnectionKey -> IO PingResult
+
+initiateStream :: Client
+                  -> ConnectionKey
+                  -> [(HeaderName, HeaderValue)]
+                  -> StreamOptions
+                  -> IO StreamID
+~~~
+
+# Stream Options Data Type
+
+~~~ {.haskell}
+data StreamOptions = StreamOptions {
+  streamOptsPriority :: Priority,
+  streamOptsDataProducer :: IO (Maybe ByteString),
+  streamOptsHeaderConsumer :: Maybe [(HeaderName, HeaderValue)]
+                              -> IO (),
+  streamOptsDataConsumer :: Maybe ByteString
+                            -> IO DeltaWindowSize }
+~~~
+
+# Talking to the Chromium flip server
+
+- `flip` is a basic test server in the Chromium repo
+
+- holds resources completely in memory
+
+- needs some simple modifications to use SPDY 3 frames, implement
+  missing parts of protocol
+
+- demo client can do pings, download files
+
+# Server interface (quite incomplete)
+
+~~~ {.haskell}
+data Server = Server { serverEndpoint :: Endpoint }
+
+server :: ServerOptions -> IO Server
+
+acceptConnection :: Server
+                    -> ConnectionKey
+                    -> NetworkConnection
+                    -> IO ()
+
+runSocketServer :: PortNumber -> Server -> IO ()
+
+runTLSServer :: PortNumber
+                -> X509
+                -> TLS.PrivateKey
+                -> Server
+                -> IO ()
+~~~
+
+# Stuff that's in progress
+
+- get server to respond to resource requests, with a pluggable
+  request handler
+
+~~~ {.haskell}
+      HeaderBlock
+      -> IO (Maybe ByteString)
+      -> IO (Maybe HeaderBlock)
+      -> IO (HeaderBlock,
+             IO (Maybe HeaderBlock),
+             IO (Maybe ByteString))
+~~~
+
+- get client to cache server-pushed resources, with a pluggable cache
+
+- better error handling, logging
+
+# Stuff I haven't started yet
+
+- automated client-server interaction tests
+
+- credential management
+
+- HTTP layer: translate requests and responses into SPDY API calls
+
+- integration with web development frameworks
+
+- deciding which stream abstraction to present for request and
+  response bodies (iteratees, conduits, something else?)
+
+- use a C implementation of TLS+NPN, or allow a selection
+
+# Lennart Kolmodin's spdy project
+
+- Lennart has had a SPDY 2 server under way for several months
+
+- <https://github.com/kolmodin/spdy>
+
+- he also contributed the implementation of the NPN extension to the
+  `hs-tls` library
+
+- I'll need to rename my modules!
+
+# List of Supporting Libraries
+
+- `attoparsec` for frame parsing
+
+- `blaze-builder` for frame serialization
+
+- `zlib-bindings` for header compression, decompression
+
+- `hs-tls` for TLS+NPN
+
+- `fingertree` for priority queues
+
+- `options` for option processing in demo programs
+
+- `QuickCheck` and `test-framework` for unit tests
+
+# Links
+
+- <http://dev.chromium.org/spdy>
+
+- <https://github.com/mbelshe/SPDY-Specification>
+
+- <https://www.modspdy.com/world-flags>
+
+- <https://github.com/kcharter/spdy-base>
+
+- <https://github.com/kolmodin/spdy>
+
+- <https://github.com/vincenthz/hs-tls>
