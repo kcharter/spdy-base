@@ -48,3 +48,40 @@ in order to form data frames of an optimal length.
 We'll call a function of this type a *request handler*. The server
 options should include a request handler that is used in response to
 all SYN_STREAM frames.
+
+## Preserving relative order of headers and data ##
+
+On May 1, 2012, I gave a talk on spdy-base at an EFPUG, and presented
+a slightly more readable form of the handler type above, where I
+replaced `[(HeaderName,HeaderValue)]` with `HeaderBlock`:
+
+    HeaderBlock
+    -> IO (Maybe ByteString)
+    -> IO (Maybe HeaderBlock)
+    -> IO (HeaderBlock,
+           IO (Maybe HeaderBlock),
+           IO (Maybe ByteString))
+
+Dale Hagglund pointed out that one small problem with this type is it
+loses the relative ordering of chunks of headers and chunks of
+data. For example, if the request entails the following additional
+frames:
+
+    HEADERS
+    DATA
+    HEADERS
+    DATA
+    DATA
+
+then the request handler cannot tell that the first `HEADERS` frame
+arrived just before the first `DATA` frame, and that the second
+`HEADERS` frame was followed by two more `DATA` frames. For serving
+HTTP requests over SPDY this probably doesn't matter. But, strictly
+speaking, it's probably a good idea to preserve this information.
+
+This suggests a slightly different type for the handler:
+
+    HeaderBlock
+    -> IO (Maybe (Either ByteString HeaderBlock)
+    -> IO (HeaderBlock,
+           IO (Maybe (Either ByteString HeaderBlock)))
