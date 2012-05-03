@@ -87,3 +87,38 @@ This suggests a slightly different type for the handler:
     -> IO (Maybe (Either ByteString HeaderBlock)
     -> IO (HeaderBlock,
            IO (Maybe (Either ByteString HeaderBlock)))
+
+
+## Signaling nothing except the initial header block in a response ##
+
+It's possible that a response does not need to send anything except
+the initial set of response headers. For example, this is surely the
+case for many HTTP error responses. For this kind of response, it's
+possible for a request handler to return something like this
+
+     (HeaderBlock [(":status", "404"),
+                   (":version", "HTTP/1.1")],
+      return Nothing)
+
+The problem with this is that the code that sends the `SYN_REPLY`
+frame with the initial header block does not know whether to set the
+`FIN` flag on that frame. It must instead obtain the `Nothing` by
+extracting the result of the first IO action. This is fine in cases
+where the IO action really is `return Nothing`. However, in cases
+where the IO action may block waiting for incoming frames, this means
+we will not send the `SYN_REPLY` as early as we should. In fact, if
+the remote endpoint waits to send more data or headers until it
+receives the `SYN_REPLY`, we've got a live lock.
+
+One reasonable way to avoid this problem involves a slight change in
+the request handler type:
+
+    HeaderBlock
+    -> Maybe (IO (Maybe (Either ByteString HeaderBlock))
+    -> IO (HeaderBlock,
+           Maybe (IO (Maybe (Either ByteString HeaderBlock))))
+
+If there is nothing but a header block in either the request (because
+the `SYN_STREAM` frame had the `FIN` flag set) or nothing but a header
+block in the response, then we don't have an IO action for getting
+more headers and data.
