@@ -122,3 +122,115 @@ If there is nothing but a header block in either the request (because
 the `SYN_STREAM` frame had the `FIN` flag set) or nothing but a header
 block in the response, then we don't have an IO action for getting
 more headers and data.
+
+## Collapsing `Maybe (Either ByteString HeaderBlock)` ##
+
+Instead of the rather long-winded
+
+    Maybe (Either ByteString HeaderBlock)
+
+I thought it would be a good idea to have a `StreamContent` type:
+
+    data StreamContent =
+      EndOfStream |
+      MoreHeaders HeaderBlock |
+      MoreData ByteString
+
+This makes the meaning of the types a little clearer, and it makes a
+request handler look like:
+
+    HeaderBlock
+    -> Maybe (IO StreamContent)
+    -> IO (HeaderBlock,
+           Maybe (IO StreamContent)))
+
+
+## Hmm. What about flow control? ##
+
+There is a problem with the request handler type: it doesn't allow us
+to deal with flow control properly. The IO action
+
+    IO StreamContent
+
+implies a pull model. The request handler reads the initial set of
+headers, and then pulls the contents of the request side of the stream
+as it can process it. This implies that all the flow control has to be
+handled within the server infrastructure, and data chunks have to be
+buffered. This is different from what we did with the SPDY client,
+where the `StreamOptions` type holds a data consumer with the type
+
+    Maybe ByteString -> IO DeltaWindowSize
+
+The idea here was that a stream did not buffer the data it received:
+it was handed off immediately to the data consumer, which would report
+back the change in window size. Note that this is a *push* approach.
+
+It would be nice if we could adopt a single approach in the `EndPoint`
+module that encompassed both the client and server cases.
+
+So if we were to adopt a push approach, what would the type of a
+request handler look like? Let's call the user of the server
+infrastructure the *web application*, and the user of the client
+infrastructure the *client application*.
+
+- we want to push the the request body and subsequent headers to the
+  web application. This suggests that the handler for incoming headers
+  and bytes have type:
+
+      StreamContent -> IO DeltaWindowSize
+
+  This function is called by the server infrastructure to push
+  incoming frames and headers to the web application; it also
+  explictly signals the end of the stream. Since it must be called by
+  the server infrastructure, the function must be part of the *result*
+  of the request handler.
+
+- if we were to use a completely push-based model, we'd want the web
+  app to push response headers and data to the server
+  infrastructure. Since the web app must do this by calling a
+  function, that function must be an argument to the request handler.
+
+This all suggests that the type of a request handler be
+
+    HeaderBlock
+    -- ^ Initial request headers.
+    -> (StreamContent -> IO DeltaWindowSize)
+    -- ^ Function to push response content.
+    -> IO (HeaderBlock, StreamContent -> IO DeltaWindowSize)
+    -- ^ Response headers, function to push further request content.
+
+This type is a little bit confusing, because the inputs and outputs
+are each partly for the request and partly for the response. There is
+also the extra complication of figuring out what `DeltaWindowSize` to
+return.
+
+Let's make sure that the response push function has the right type for
+dealing with flow control. In the server infrastructure, we need to
+track the remaining window size for the client side. By default, we'd
+assume that the window size is 64KB. When we push a chunk of data, the
+server infrastructure must
+
+- send a `DATA` frame to the client side
+
+- decrement the window size for the stream
+
+At this point, the client has not sent a `WINDOW_UPDATE` frame to tell
+the server what the change in window size is. Note that
+`DeltaWindowSize` is by design positive. Therefore, the type
+
+    StreamContent -> IO DeltaWindowSize
+
+does not make sense for pushing response content: the server
+infrastructure cannot really return anything but zero, since pushing
+data decreases the window. There must be a separate function through
+which the server infrastructure can notify the web application that
+there is room. Either that, or the push function must block when there
+isn't enough space left. Further, it doesn't need to return
+anything. This suggests a revision of the type:
+
+    HeaderBlock
+    -- ^ Initial request headers.
+    -> (StreamContent -> IO ())
+    -- ^ Function to push response content.
+    -> IO (HeaderBlock, StreamContent -> IO DeltaWindowSize)
+    -- ^ Response headers, function to push further request content.
