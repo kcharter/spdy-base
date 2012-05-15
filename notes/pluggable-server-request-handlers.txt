@@ -234,3 +234,63 @@ anything. This suggests a revision of the type:
     -- ^ Function to push response content.
     -> IO (HeaderBlock, StreamContent -> IO DeltaWindowSize)
     -- ^ Response headers, function to push further request content.
+
+## I think flow control should be hidden from the web app layer ##
+
+After thinking about it some more, I've concluded that the details of
+flow control should be hidden in the server layer. The web app layer
+shouldn't need to be concerned with returning a `DeltaWindowSize`.
+
+SPDY assumes that every stream on a connection has the same initial
+data window size, and the initial window size varies only by
+connection, not by stream. Given that constraint, there is nothing
+clever or fancy that the web app layer can do with respect to
+buffering. For example, there is no way to allocate more buffer space
+to higher-priority streams, since it violates assumptions built into
+the protocol. If the web app layer has to return a `DeltaWindowSize`
+when it receives data, then it must ensure that we don't violate the
+buffering policy, something that I think can be dealt with in the
+server infrastructure. In short, making the web app layer deal with
+the burden of window size deltas doesn't seem to deliver any benefits,
+but it scatters the implementation of flow control over two
+components, and increases the complexity of the whole.
+
+We've already gone this route with the client, where the app must
+supply a 'push' function to the client API, one that returns a
+`DeltaWindowSize` value. To leave implementation options open to the
+application layer, we had to permit the app to return a
+`DeltaWindowSize` of zero. Consequently, we had to add the
+`updateWindow` function in order to allow the app to unstall the data
+stream. This function comes with a long-winded description, but it's
+not clear that a client would ever need to use it in practice, or
+would use it correctly.
+
+So I think it's better to hide flow control inside the server layer,
+and inside the client layer. That is, for each stream on a connection
+with initial window size W, an endpoint will buffer up to W bytes in
+each direction for each stream. But then what is the most natural API
+for transferring data and headers between the application layers and
+the infrastructure layers at each endpoint?
+
+From the web app layer's perspective, the most natural interface would
+
+- pull request data and headers from the server infrastructure
+
+- push response data and headers to the server infrastructure
+
+Or at least that's what my imperative language experience tells me
+should be most natural. This is a hybrid of the approaches described
+above. The type of a request handler would then look like
+
+    HeaderBlock
+    -- ^ Initial request headers.
+    -> IO StreamContent
+    -- ^ Action to pull subsequent data and headers.
+    -> (StreamContent -> IO ())
+    -- ^ Function to push response content.
+    -> IO HeaderBlock
+    -- ^ Response headers
+
+
+I think we may need some kind of bounded buffer data structure that we
+can use in a stream. That's the next thing to figure out.
