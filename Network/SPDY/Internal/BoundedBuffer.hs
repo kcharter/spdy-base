@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 {- | Bounded buffers.
 
 A bounded buffer is a queue of sized values in which the sum of
@@ -7,7 +9,8 @@ endpoint.
 
 -}
 
-module Network.SPDY.Internal.BoundedBuffer (BoundedBuffer,
+module Network.SPDY.Internal.BoundedBuffer (Sized(..),
+                                            BoundedBuffer,
                                             new,
                                             add,
                                             remove,
@@ -19,6 +22,7 @@ import Control.Concurrent.QSemN
 import Control.Monad (liftM4, when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Foldable
 import qualified Data.Foldable as F
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import Data.Sequence (Seq, (|>))
@@ -30,6 +34,9 @@ class Sized a where
 
 instance Sized ByteString where
   size = B.length
+
+instance (Sized a, Foldable f, Functor f) => Sized (f a) where
+  size = F.sum . fmap size
 
 -- | A FIFO collection of sized values, bounded by a total capacity.
 data BoundedBuffer a =
