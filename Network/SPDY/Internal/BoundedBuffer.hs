@@ -17,8 +17,10 @@ module Network.SPDY.Internal.BoundedBuffer (Sized(..),
                                             totalCapacity,
                                             remainingCapacity) where
 
-import Control.Concurrent.QSem
-import Control.Concurrent.QSemN
+import Control.Concurrent.MSem (MSem)
+import qualified Control.Concurrent.MSem as MSem
+import Control.Concurrent.MSemN (MSemN)
+import qualified Control.Concurrent.MSemN as MSemN
 import Control.Monad (liftM4, when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -41,14 +43,14 @@ instance (Sized a, Foldable f, Functor f) => Sized (f a) where
 -- | A FIFO collection of sized values, bounded by a total capacity.
 data BoundedBuffer a =
   BoundedBuffer { bbChunks :: IORef (Seq a)
-                , bbChunkCount :: QSem
-                , bbFreeSpace :: QSemN
+                , bbChunkCount :: MSem Int
+                , bbFreeSpace :: MSemN Int
                 , bbOriginalCapacity :: Int }
 
 -- | Creates a new empty buffer with a given total capacity.
 new :: Sized a => Int -> IO (BoundedBuffer a)
 new capacity =
-  liftM4 BoundedBuffer (newIORef S.empty) (newQSem 0) (newQSemN capacity) (return capacity)
+  liftM4 BoundedBuffer (newIORef S.empty) (MSem.new 0) (MSemN.new capacity) (return capacity)
 
 -- | Adds a chunk to the buffer. Raises an error if the size
 -- of the chunk is greater than the total capacity of the
@@ -56,22 +58,26 @@ new capacity =
 -- another thread removes enough chunks to free the required space.
 add :: Sized a => BoundedBuffer a -> a -> IO ()
 add bb chunk = do
+  ensurePossibleChunk bb chunk
+  MSemN.wait (bbFreeSpace bb) (size chunk)
+  atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
+  MSem.signal (bbChunkCount bb)
+
+-- | Attempts to add a chunk to the buffer, an indicates whether it
+ensurePossibleChunk bb chunk =
   when (n > totalCapacity bb)
     (error ("Can't insert chunk of size " ++ show n ++
             " in a buffer with total capacity " ++
             show (totalCapacity bb)))
-  waitQSemN (bbFreeSpace bb) n
-  atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
-  signalQSem (bbChunkCount bb)
   where n = size chunk
 
 -- | Removes the next available chunk from the buffer, blocking if the
 -- buffer is empty.
 remove :: Sized a => BoundedBuffer a -> IO a
 remove bb = do
-  waitQSem (bbChunkCount bb)
+  MSem.wait (bbChunkCount bb)
   chunk <- atomicModifyIORef (bbChunks bb) takeFirst
-  signalQSemN (bbFreeSpace bb) (size chunk)
+  MSemN.signal (bbFreeSpace bb) (size chunk)
   return chunk
   where takeFirst chunks =
           let (first, rest) = S.splitAt 1 chunks

@@ -40,7 +40,8 @@ Library
                        Network.SPDY.Internal.PriorityChan,
                        Network.SPDY.Internal.Serialize,
                        Network.SPDY.Internal.ToWord8
-  Build-depends:       attoparsec >= 0.10 && < 1,
+  Build-depends:       SafeSemaphore >= 0.7 && < 1,
+                       attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
                        bytestring >= 0.9 && < 0.10,
@@ -67,6 +68,7 @@ Test-Suite tests
   main-is:              test/Main.hs
   hs-source-dirs:       ".", test
   build-depends:        QuickCheck >= 2 && <= 3,
+                        SafeSemaphore >= 0.7 && < 1,
                         attoparsec >= 0.10 && < 1,
                         base >= 3 && < 5,
                         blaze-builder >= 0.3 && < 1,
