@@ -21,7 +21,8 @@ test = testGroup "Bounded buffer tests" [
   testProperty "capacity" $ forAll withSpaceFor prop_capacity,
   testProperty "fifo" $ forAll withSpaceForEach prop_fifo,
   testProperty "constant total capacity" $ forAll withSpaceForAll prop_constTotalCapacity,
-  testProperty "error on impossible add" $ forAll withoutSpaceFor prop_oversizedError
+  testProperty "error on impossible add" $ forAll withoutSpaceFor prop_oversizedError,
+  testProperty "tryAdd is a non-blocking add" $ forAll withSpaceForBiggest prop_tryAddIsANonblockingAdd
   ]
 
 prop_capacity = morallyDubiousIOProperty . propIO_capacity
@@ -67,6 +68,25 @@ propIO_oversizedError (content, capacity) =
     (BB.add bb content >> return False) `catch` handleErrorCall
     where handleErrorCall (ErrorCall _) = return True
 
+prop_tryAddIsANonblockingAdd = morallyDubiousIOProperty . propIO_tryAddIsANonblockingAdd
+
+propIO_tryAddIsANonblockingAdd :: ([Content], Int) -> IO Bool
+propIO_tryAddIsANonblockingAdd (contents, capacity) =
+  -- the non-blocking part is implicit here, since we attempt to add
+  -- all the chunks before removing any, all in the current thread
+  assert (all ((capacity >=) . size) contents) $ do
+    bb <- BB.new capacity
+    results <- mapM (tryAdd' bb) contents
+    let successes = map fst results
+        resultsExpected = map snd results
+        added = map snd $ filter fst $ zip successes contents
+    present <- mapM (const $ BB.remove bb) added
+    return $! and resultsExpected && present == added
+    where tryAdd' bb chunk = do
+            rc <- BB.remainingCapacity bb
+            success <- BB.tryAdd bb chunk
+            return $! (success, success == (size chunk <= rc))
+
 withSpaceFor :: Gen (Content, Int)
 withSpaceFor = do
   content <- arbitrary
@@ -90,14 +110,20 @@ withSpaceForEach = do
   contents <- arbitrary
   capacity <- atLeast (safeMaximum $ map size contents)
   return (contents, capacity)
-  where safeMaximum [] = 0
-        safeMaximum xs = maximum xs
+
+withSpaceForBiggest :: Gen ([Content], Int)
+withSpaceForBiggest = do
+  contents <- arbitrary
+  return (contents, safeMaximum $ map size contents)
+
+safeMaximum [] = 0
+safeMaximum xs = maximum xs
 
 thatCanHold :: Sized a => a -> Gen Int
 thatCanHold = atLeast . size
 
 atLeast :: Int -> Gen Int
-atLeast n = choose (n, 1024*1024)
+atLeast n = choose (n, 2*n)
 
 data Content = MetaData | RawData ByteString deriving (Eq, Ord, Show, Read)
 

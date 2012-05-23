@@ -13,6 +13,7 @@ module Network.SPDY.Internal.BoundedBuffer (Sized(..),
                                             BoundedBuffer,
                                             new,
                                             add,
+                                            tryAdd,
                                             remove,
                                             totalCapacity,
                                             remainingCapacity) where
@@ -64,6 +65,18 @@ add bb chunk = do
   MSem.signal (bbChunkCount bb)
 
 -- | Attempts to add a chunk to the buffer, an indicates whether it
+-- was successful.
+tryAdd :: Sized a => BoundedBuffer a -> a -> IO Bool
+tryAdd bb chunk = do
+  ensurePossibleChunk bb chunk
+  (_, added) <- MSemN.waitF (bbFreeSpace bb) demandIfEnough
+  when added $ do
+    atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
+    MSem.signal (bbChunkCount bb)
+  return added
+  where demandIfEnough avail = if avail >= n then (n, True) else (0, False)
+          where n = size chunk
+
 ensurePossibleChunk bb chunk =
   when (n > totalCapacity bb)
     (error ("Can't insert chunk of size " ++ show n ++
