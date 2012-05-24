@@ -294,3 +294,51 @@ above. The type of a request handler would then look like
 
 I think we may need some kind of bounded buffer data structure that we
 can use in a stream. That's the next thing to figure out.
+
+## Oops. We need to support streams with empty response ##
+
+In the last section we arrived at the response handler type
+
+    HeaderBlock
+    -- ^ Initial request headers.
+    -> IO StreamContent
+    -- ^ Action to pull subsequent data and headers.
+    -> (StreamContent -> IO ())
+    -- ^ Function to push response content.
+    -> IO HeaderBlock
+    -- ^ Response headers
+
+Here, the web app layer receives functions to pull incoming request
+content, and to push outgoing response content. The only problem with
+this is one we've raised before: it's impossible to put the `FIN` flag
+on the `SYN_REPLY` frame if all we get back is a header block.
+
+This suggests that the more natural form of the request handler type is
+
+    HeaderBlock
+    -- ^ Initial request headers.
+    -> IO StreamContent
+    -- ^ Action to pull subsequent data and headers.
+    -> IO (HeaderBlock, Maybe (IO StreamContent))
+    -- ^ Response headers, optional action for getting response content.
+
+Now it's the server infrastructure's responsibility to pull the
+response from the web app layer. A result of the form
+
+    (headers, Nothing)
+
+indicates that there is no response content other than the initial set
+of response headers, and so the `SYN_REPLY` frame can have the `FIN`
+flag set and there is no need to extract the first piece of response
+content.
+
+Will this work for both server and client?
+
+On the client side, the only role of a request handler is for server
+push. In this case, the result will always be of the form
+
+    (headers, Nothing)
+
+and the headers will probably be empty. The code that pulls the
+request content is really pulling a server-pushed resource into some
+kind of cache. So this looks like it should be adequate.
