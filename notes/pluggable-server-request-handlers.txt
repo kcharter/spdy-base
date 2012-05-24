@@ -342,3 +342,35 @@ push. In this case, the result will always be of the form
 and the headers will probably be empty. The code that pulls the
 request content is really pulling a server-pushed resource into some
 kind of cache. So this looks like it should be adequate.
+
+## No need to buffer outgoing stream content ##
+
+A couple of sections back I said
+
+>     So I think it's better to hide flow control inside the server
+>     layer, and inside the client layer. That is, for each stream on a
+>     connection with initial window size W, an endpoint will buffer up
+>     to W bytes in each direction for each stream.
+
+It's not, in fact, necessary to buffer outgoing stream content. What
+is necessary is tracking the remaining data window size, and it should
+be fine to do this with a quantity semaphore like the one in
+`Control.Concurrent.MSemN` from the SafeSemaphore package. This is
+handled like so:
+
+- a thread in the server infrastructure executes a loop that pulls the
+  next stream content from the web app, takes the necessary space from
+  the semaphore, and then sends the necessary frame
+
+- the incoming reader thread handles `WINDOW_UPDATE` frames by
+  signalling the availability of the new window space on the semaphore
+
+- if a `SETTINGS` frame arrives with a new value for the window size
+  on the connection, then if we have to adjust the existing streams,
+  we can
+
+    - signal the difference between the new window size and the old one
+      on each semaphore
+
+    - expand the incoming data buffers by the same difference, provided
+      it is positive
