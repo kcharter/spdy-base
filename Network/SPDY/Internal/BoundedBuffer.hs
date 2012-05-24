@@ -22,7 +22,7 @@ import Control.Concurrent.MSem (MSem)
 import qualified Control.Concurrent.MSem as MSem
 import Control.Concurrent.MSemN (MSemN)
 import qualified Control.Concurrent.MSemN as MSemN
-import Control.Monad (liftM4, when)
+import Control.Monad (liftM4, when, void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Foldable
@@ -58,24 +58,28 @@ new capacity =
 -- buffer. Blocks if there is insufficient remaining capacity, until
 -- another thread removes enough chunks to free the required space.
 add :: Sized a => BoundedBuffer a -> a -> IO ()
-add bb chunk = do
-  ensurePossibleChunk bb chunk
-  MSemN.wait (bbFreeSpace bb) (size chunk)
-  atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
-  MSem.signal (bbChunkCount bb)
+add bb chunk = void $ addGeneral bb chunk True
 
--- | Attempts to add a chunk to the buffer, an indicates whether it
--- was successful.
+-- | Attempts to add a chunk to the buffer, and indicates whether it
+-- was successful. May block momentarily, but not indefinitely.
 tryAdd :: Sized a => BoundedBuffer a -> a -> IO Bool
-tryAdd bb chunk = do
+tryAdd bb chunk = addGeneral bb chunk False
+
+-- | Adds a chunk, optionally waiting until space is
+-- available. Returns 'True' if the chunk was added, 'False'
+-- otherwise.
+addGeneral :: Sized a => BoundedBuffer a -> a -> Bool -> IO Bool
+addGeneral bb chunk waitForSpace = do
   ensurePossibleChunk bb chunk
-  (_, added) <- MSemN.waitF (bbFreeSpace bb) demandIfEnough
-  when added $ do
+  (_, sufficient) <- MSemN.waitF (bbFreeSpace bb) demand
+  when sufficient $ do
     atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
     MSem.signal (bbChunkCount bb)
-  return added
-  where demandIfEnough avail = if avail >= n then (n, True) else (0, False)
-          where n = size chunk
+  return sufficient
+  where demand avail = let sufficientNow = avail >= n
+                           n = size chunk
+                           sufficient = sufficientNow || waitForSpace
+                       in (if sufficient then n else 0, sufficient)
 
 ensurePossibleChunk bb chunk =
   when (n > totalCapacity bb)
