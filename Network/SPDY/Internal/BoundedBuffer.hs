@@ -22,6 +22,7 @@ import Control.Concurrent.MSem (MSem)
 import qualified Control.Concurrent.MSem as MSem
 import Control.Concurrent.MSemN (MSemN)
 import qualified Control.Concurrent.MSemN as MSemN
+import Control.Exception (mask_)
 import Control.Monad (liftM4, when, void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -71,15 +72,27 @@ tryAdd bb chunk = addGeneral bb chunk False
 addGeneral :: Sized a => BoundedBuffer a -> a -> Bool -> IO Bool
 addGeneral bb chunk waitForSpace = do
   ensurePossibleChunk bb chunk
-  (_, sufficient) <- MSemN.waitF (bbFreeSpace bb) demand
-  when sufficient $ do
-    atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
-    MSem.signal (bbChunkCount bb)
-  return sufficient
-  where demand avail = let sufficientNow = avail >= n
-                           n = size chunk
-                           sufficient = sufficientNow || waitForSpace
-                       in (if sufficient then n else 0, sufficient)
+  -- Using mask_ here should be sufficient to prevent an asynchronous
+  -- exception from corrupting the state of the buffer, for three
+  -- reasons. First, according to the SafeSemaphore docs MSemN.waitF
+  -- can be interrupted, but it guarantees that it will not lose any
+  -- of the semaphore quantity when this happens. Second, according to
+  -- the Control.Exception docs, atomicModifyIORef is not
+  -- interruptible. Third, according to the SafeSemaphore docs,
+  -- MSem.signal is not interruptible. Therefore, the only part that
+  -- can be interrupted by an asynchronous exception is MSemN.waitF,
+  -- and in that case none of the semaphore quantity is taken, and the
+  -- buffer will not add a chunk or signal the arrival of chunk.
+  mask_ $ do
+    (_, sufficient) <- MSemN.waitF (bbFreeSpace bb) demand
+    when sufficient $ do
+      atomicModifyIORef (bbChunks bb) (\chunks -> (chunks |> chunk, ()))
+      MSem.signal (bbChunkCount bb)
+    return sufficient
+    where demand avail = let sufficientNow = avail >= n
+                             n = size chunk
+                             sufficient = sufficientNow || waitForSpace
+                         in (if sufficient then n else 0, sufficient)
 
 ensurePossibleChunk bb chunk =
   when (n > totalCapacity bb)
@@ -91,7 +104,10 @@ ensurePossibleChunk bb chunk =
 -- | Removes the next available chunk from the buffer, blocking if the
 -- buffer is empty.
 remove :: Sized a => BoundedBuffer a -> IO a
-remove bb = do
+remove bb = mask_ $ do
+  -- mask_ should be sufficient to prevent asynchronous exceptions
+  -- from corrupting the state of the buffer, for reasons similar to
+  -- those described in 'addGeneral' above.
   MSem.wait (bbChunkCount bb)
   chunk <- atomicModifyIORef (bbChunks bb) takeFirst
   MSemN.signal (bbFreeSpace bb) (size chunk)
