@@ -4,17 +4,14 @@
 module TlsServer where
 
 import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar)
 import Control.Monad (when)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Lazy.Char8 as LC8
 import Data.Char (isSpace, toLower)
-import Data.Maybe (listToMaybe)
 import Data.Time.LocalTime (getZonedTime)
 import Network.Socket
-import System.Environment (getArgs)
 import System.IO
 
 import Options

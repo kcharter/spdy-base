@@ -4,8 +4,6 @@
 module SPing where
 
 import Control.Monad (replicateM_)
-import Network (PortNumber)
-import System.Environment (getArgs)
 import System.IO (hSetBuffering, BufferMode(..), stdout, stderr)
 
 import Options

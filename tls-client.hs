@@ -4,7 +4,6 @@ module TlsClient where
 
 import qualified Data.ByteString.Char8 as C8
 import Network
-import System.Environment
 import System.IO
 
 import Options
