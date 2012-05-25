@@ -55,7 +55,7 @@ import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, putMVar
 import Control.Concurrent.MSemN (MSemN)
 import qualified Control.Concurrent.MSemN as MSemN
 import Control.Exception (throw, finally)
-import Control.Monad (when, unless, void)
+import Control.Monad (when, unless)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -152,18 +152,17 @@ instance Sized StreamContent where
 data StreamOptions = StreamOptions {
   streamOptsPriority :: Priority,
   -- ^ The priority for the stream.
-  streamOptsProducer :: Maybe (IO StreamContent)
-  -- ^ An action that retrieves the next chunk of content to send to the
-  -- remote endpoint.
+  streamOptsHalfClosed :: Bool
+  -- ^ Whether the stream is half-closed. On a half-closed stream,
+  -- there is no further content other than the inital set of headers.
   }
 
--- | A default set of stream options that includes a medium priority
--- (4), a data producer that produces no data, and consumers that
--- simply discard their inputs.
+-- | A default set of stream options. The stream is half closed and of
+-- medium priority (4).
 defaultStreamOptions :: StreamOptions
 defaultStreamOptions = StreamOptions {
   streamOptsPriority = Priority 4,
-  streamOptsProducer = Nothing
+  streamOptsHalfClosed = True
   }
 
 -- | Sends a WINDOW_UPDATE frame for a given stream on a given
@@ -343,25 +342,24 @@ removePingHandler conn pingID =
 addStream :: Connection
              -> StreamID
              -> Priority
-             -> Maybe (IO StreamContent)
-             -> IO (IO StreamContent)
-addStream conn sid priority maybeProducer = do
+             -> Bool
+             -> IO (Maybe (StreamContent -> IO ()), IO StreamContent)
+addStream conn sid priority halfClosed = do
   dws <- getInitialDataWindowSize conn
   dwsSem <- MSemN.new dws
   buf <- BB.new dws
   s <- atomicModifyIORef (connStreams conn) $ \sm ->
     let s = Stream sid priority dwsSem buf
     in (DM.insert sid s sm, s)
-  maybe (return ()) (void . forkIO . contentPusher s) maybeProducer
-  return (contentPuller s)
-  where contentPusher s producer = do
+  return (if halfClosed then Nothing else Just (contentPusher s), contentPuller s)
+  where contentPusher s content = do
           -- TODO: if there is an exception, we should signal an
           -- internal error to the remote endpoint, and tear down the
           -- stream
-          content <- producer
+          -- TODO: if we have previously seen the end of the content,
+          -- then we should throw an exception
           MSemN.wait (ssOutgoingWindowSize s) (size content)
           queueContent content
-          unless (isLast content) (contentPusher s producer)
           where queueContent content =
                   let last = isLast content
                   in forContent (queueHeaders last) (queueData last) content

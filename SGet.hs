@@ -51,7 +51,7 @@ main = runCommand $ \opts _ -> do
                          (HeaderName "method", HeaderValue "GET"),
                          (HeaderName "url", HeaderValue $ fromString $ "http://" ++ host ++ ":" ++ show port ++ "/" ++ path),
                          (HeaderName "scheme", HeaderValue "http")]
-          (sid, responseProducer) <- initiateStream c cKey headers defaultStreamOptions
+          (sid, _, responseProducer) <- initiateStream c cKey headers defaultStreamOptions
           putStrLn $ "Initiated stream " ++ show sid
           hFlush stdout
           allHeaderBlocks <- getResponse [] responseProducer

@@ -21,7 +21,6 @@ module Network.SPDY.Client (ClientOptions(..),
                             ) where
 
 import qualified Data.ByteString.Char8 as C8
-import Data.Maybe (isNothing)
 import Network (connectTo)
 import System.IO (hPutStrLn, stderr)
 
@@ -105,21 +104,22 @@ initiateStream :: Client
                   -- ^ The list of headers to send in the SYN_STREAM frame.
                   -> StreamOptions
                   -- ^ Other options for the stream.
-                  -> IO (StreamID, IO StreamContent)
-                  -- ^ The ID for the initiated stream, and an action
-                  -- for getting the response content.
+                  -> IO (StreamID, Maybe (StreamContent -> IO ()), IO StreamContent)
+                  -- ^ The ID for the initiated stream, an optional
+                  -- request content pusher, a response content
+                  -- puller. If the options indicated this was a
+                  -- half-closed stream, the pusher will be 'Nothing'.
 initiateStream client cKey headers opts = do
   conn <- getConnection client cKey
-  let maybeProducer = streamOptsProducer opts
-      halfClosed = isNothing maybeProducer
+  let halfClosed = streamOptsHalfClosed opts
       flags = packFlags (if halfClosed then [SynStreamFlagFin] else [])
       prio = streamOptsPriority opts
   (sid, initFrame) <- synStreamFrame conn flags Nothing prio Nothing headers
-  responseProducer <- addStream conn sid prio maybeProducer
+  (maybeRequestPusher, responseProducer) <- addStream conn sid prio halfClosed
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
   queueFlush conn sprio
-  return (sid, responseProducer)
+  return (sid, maybeRequestPusher, responseProducer)
 
 -- | Sends a change in the window size for a stream to the remote
 -- endpoint.
