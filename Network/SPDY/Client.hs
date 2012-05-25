@@ -20,7 +20,6 @@ module Network.SPDY.Client (ClientOptions(..),
                             Milliseconds
                             ) where
 
-import Control.Monad (when)
 import qualified Data.ByteString.Char8 as C8
 import Data.Maybe (isNothing)
 import Network (connectTo)
@@ -30,7 +29,7 @@ import qualified Crypto.Random as CR
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLSX
 
-import Network.SPDY.Flags (allClear, packFlags, isSet)
+import Network.SPDY.Flags (packFlags)
 import Network.SPDY.Frames
 import Network.SPDY.Endpoint
 import Network.SPDY.NetworkConnection (NetworkConnection)
@@ -103,28 +102,24 @@ initiateStream :: Client
                   -> ConnectionKey
                   -- ^ Identifies the connection on which to initiate the stream.
                   -> [(HeaderName, HeaderValue)]
-                  -- ^ The list of headers to send.
+                  -- ^ The list of headers to send in the SYN_STREAM frame.
                   -> StreamOptions
-                  -- ^ Other options for the stream, in particular the
-                  -- producers and consumers.
-                  -> IO StreamID
-                  -- ^ The ID for the initiated stream.
+                  -- ^ Other options for the stream.
+                  -> IO (StreamID, IO StreamContent)
+                  -- ^ The ID for the initiated stream, and an action
+                  -- for getting the response content.
 initiateStream client cKey headers opts = do
   conn <- getConnection client cKey
-  maybeData <- streamOptsDataProducer opts
-  let halfClosed = isNothing maybeData
+  let maybeProducer = streamOptsProducer opts
+      halfClosed = isNothing maybeProducer
       flags = packFlags (if halfClosed then [SynStreamFlagFin] else [])
       prio = streamOptsPriority opts
-      dataProducer = streamOptsDataProducer opts
-      headerConsumer = streamOptsHeaderConsumer opts
-      dataConsumer = streamOptsDataConsumer opts
   (sid, initFrame) <- synStreamFrame conn flags Nothing prio Nothing headers
-  addStream conn sid prio dataProducer headerConsumer dataConsumer
+  responseProducer <- addStream conn sid prio maybeProducer
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame
-  maybe (return ()) (queueFrame conn sprio . ADataFrame . (DataFrame sid allClear)) maybeData
   queueFlush conn sprio
-  return sid
+  return (sid, responseProducer)
 
 -- | Sends a change in the window size for a stream to the remote
 -- endpoint.
@@ -204,50 +199,4 @@ toNetworkConnection cs cKey =
 
 -- | A set of input frame handlers for a client endpoint.
 stdClientInputFrameHandlers :: Connection -> FrameHandlers (IO ())
-stdClientInputFrameHandlers conn =
-  (defaultEndpointInputFrameHandlers conn)
-    { handleDataFrame = forDataFrame
-    , handleSynReplyFrame = forSynReplyFrame
-    , handleHeadersFrame = forHeadersFrame }
-    where forDataFrame d =
-            let sid = streamID d
-                flags = dataFlags d
-                bytes = dataBytes d
-            in lookupStream conn sid >>=
-               maybe
-               (streamError $ "DATA frame for unknown stream " ++ show sid)
-               (\s -> do
-                   let isLast = isSet DataFlagFin flags
-                   dws <- ssDataConsumer s (Just bytes)
-                   if isLast then endOfStream s else sendWindowUpdate conn s dws)
-          forSynReplyFrame _ sr =
-            let flags = synReplyFlags sr
-                sid = synReplyNewStreamID sr
-                (HeaderBlock headers) = synReplyHeaderBlock sr
-            in lookupStream conn sid >>=
-               maybe
-               (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
-               (\s -> do
-                   ssHeaderConsumer s (Just headers)
-                   when (isSet SynReplyFlagFin flags) (endOfStream s))
-          forHeadersFrame _ h =
-            let sid = headersStreamID h
-                flags = headersFlags h
-                (HeaderBlock headers) = headersHeaderBlock h
-            in lookupStream conn sid >>=
-               maybe
-               (streamError ("HEADERS for unknown stream ID " ++ show sid))
-               (\s -> do
-                   ssHeaderConsumer s (Just headers)
-                   when (isSet HeadersFlagFin flags) (endOfStream s))
-          logErr = logMessage conn
-          endOfStream s = do
-            ssHeaderConsumer s Nothing
-            ssDataConsumer s Nothing
-            -- TODO: in order to tell whether the stream is really
-            -- finished, we need to know whether the stream is closed
-            -- from our side or not.
-            removeStream conn (ssStreamID s)
-          streamError msg =
-            logErr msg
-            -- TODO: I think we're supposed to send a GOAWAY and clean up
+stdClientInputFrameHandlers = defaultEndpointInputFrameHandlers

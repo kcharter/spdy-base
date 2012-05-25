@@ -3,17 +3,15 @@
 
 module SGet where
 
-import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import qualified Data.ByteString as B
 import Data.String (fromString)
-import Network (PortNumber)
-import System.Environment (getArgs)
 import System.IO (hFlush, stdout, stderr, BufferMode(..), hSetBuffering)
 
 import Options
 
 import Network.SPDY.Client
-import Network.SPDY.Frames (HeaderName(..), HeaderValue(..))
+import Network.SPDY.Endpoint (forContent, isLast)
+import Network.SPDY.Frames (HeaderBlock(..), HeaderName(..), HeaderValue(..))
 
 defineOptions "Opts" $ do
   stringOption "optHost" "host" "localhost" "The host name or IP address of the server."
@@ -38,8 +36,6 @@ main = runCommand $ \opts _ -> do
   hSetBuffering stderr bufferMode
   doDownload c host port useTLS path
   where doDownload c host port useTLS path = do
-          doneHeaders <- newEmptyMVar
-          doneData <- newEmptyMVar
           let cKey = OriginKey (Origin (if useTLS then "https" else "http") (Host host) port)
               -- Apparently, the flip server does not use the
               -- prescribed special header names that start with a
@@ -55,24 +51,21 @@ main = runCommand $ \opts _ -> do
                          (HeaderName "method", HeaderValue "GET"),
                          (HeaderName "url", HeaderValue $ fromString $ "http://" ++ host ++ ":" ++ show port ++ "/" ++ path),
                          (HeaderName "scheme", HeaderValue "http")]
-              opts = defaultStreamOptions {
-                streamOptsHeaderConsumer = \maybeHeaders ->
-                 case maybeHeaders of
-                   Nothing ->
-                     putMVar doneHeaders ()
-                   Just headers ->
-                     mapM_ printHeader headers >> putStr "\r\n",
-                streamOptsDataConsumer = \maybeBytes ->
-                  case maybeBytes of
-                    Nothing ->
-                      putMVar doneData () >> return 0
-                    Just bytes ->
-                      B.putStr bytes >> return (fromIntegral $ B.length bytes)
-                }
-              printHeader (HeaderName name, HeaderValue value) =
-                B.putStr name >> putStr " = " >> B.putStr value >> putStr "\r\n"
-          sid <- initiateStream c cKey headers opts
+          (sid, responseProducer) <- initiateStream c cKey headers defaultStreamOptions
           putStrLn $ "Initiated stream " ++ show sid
           hFlush stdout
-          takeMVar doneHeaders
-          takeMVar doneData
+          allHeaderBlocks <- getResponse [] responseProducer
+          mapM_ dumpHeaderBlock allHeaderBlocks
+          where getResponse revHeaderBlocks producer = do
+                  content <- producer
+                  revHeaderBlocks' <- forContent (forHeaders revHeaderBlocks) (forData revHeaderBlocks) content
+                  (if isLast content
+                   then return revHeaderBlocks'
+                   else getResponse revHeaderBlocks' producer)
+                forHeaders = (return .) . flip (:)
+                forData revHeaderBlocks bytes =
+                  B.putStr bytes >> return revHeaderBlocks
+                dumpHeaderBlock (HeaderBlock pairs) =
+                  mapM_ printHeader pairs
+                printHeader (HeaderName name, HeaderValue value) =
+                  B.putStr name >> putStr " = " >> B.putStr value >> putStr "\r\n"

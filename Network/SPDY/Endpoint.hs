@@ -22,6 +22,11 @@ module Network.SPDY.Endpoint
          -- * Flow control
          sendWindowUpdate,
          -- * Streams
+         StreamContent,
+         moreHeaders,
+         moreData,
+         isLast,
+         forContent,
          StreamOptions(..),
          defaultStreamOptions,
          Stream(..),
@@ -31,8 +36,11 @@ module Network.SPDY.Endpoint
          -- * Input frame handlers
          defaultEndpointInputFrameHandlers,
          -- * Creating frames
+         dataFrame,
          pingFrame,
          synStreamFrame,
+         headersFrame,
+         windowUpdateFrame,
          controlFrame,
          -- * Output on a stream
          OutgoingPriority(..),
@@ -44,8 +52,10 @@ module Network.SPDY.Endpoint
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, putMVar, takeMVar)
+import Control.Concurrent.MSemN (MSemN)
+import qualified Control.Concurrent.MSemN as MSemN
 import Control.Exception (throw, finally)
-import Control.Monad (when)
+import Control.Monad (when, unless, void)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -63,9 +73,11 @@ import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
                                    -- this module in Network.SPDY
 import Network.SPDY.Error
-import Network.SPDY.Flags (Flags)
+import Network.SPDY.Flags (Flags, isSet, packFlags)
 import Network.SPDY.Frames
 import Network.SPDY.Compression
+import Network.SPDY.Internal.BoundedBuffer (BoundedBuffer, Sized(..))
+import qualified Network.SPDY.Internal.BoundedBuffer as BB
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
 import qualified Network.SPDY.Internal.PriorityChan as PC
 import Network.SPDY.Deserialize
@@ -114,25 +126,35 @@ endpoint options = do
     epInputFrameHandlers = epOptsInputFrameHandlers options
     }
 
+-- | The various kinds of content that can arrive on or be sent on a stream.
+data StreamContent = StreamContent !(Either HeaderBlock ByteString) !Bool
+
+-- | Creates stream content from a header block.
+moreHeaders :: HeaderBlock -> Bool -> StreamContent
+moreHeaders headers last = StreamContent (Left headers) last
+
+-- | Creates stream content from a chunk of data.
+moreData :: ByteString -> Bool -> StreamContent
+moreData bytes last = StreamContent (Right bytes) last
+
+-- | Indicates whether this is the last content on the stream.
+isLast :: StreamContent -> Bool
+isLast (StreamContent _ b) = b
+
+-- | Processes stream content.
+forContent :: (HeaderBlock -> a) -> (ByteString -> a) -> StreamContent -> a
+forContent forHeaders forBytes (StreamContent c _) = either forHeaders forBytes c
+
+instance Sized StreamContent where
+  size = forContent (const 0) size
+
 -- | Options for initiating streams.
 data StreamOptions = StreamOptions {
   streamOptsPriority :: Priority,
   -- ^ The priority for the stream.
-  streamOptsDataProducer :: IO (Maybe ByteString),
-  -- ^ An action that retrieves the next chunk of data to send to the
-  -- remote endpoint. 'Nothing' indicates no more data.
-  streamOptsHeaderConsumer :: Maybe [(HeaderName, HeaderValue)] -> IO (),
-  -- ^ An action that consumes headers that arrive from the remote
-  -- endpoint. 'Nothing' indicates that there are no more headers.
-  streamOptsDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
-  -- ^ An action that consumes bytes that arrive from the remote
-  -- endpoint. 'Nothing' indicates that there is no more data.  The
-  -- result is the number of bytes that are /consumed/ in the
-  -- operation, and is used in flow control. If some or all of a given
-  -- chunk of data must be buffered pending consumption, the change in
-  -- window size can be smaller than the length of the byte string. If
-  -- this action can return zero, you may need to use 'updateWindow'
-  -- to avoid stalling the stream.
+  streamOptsProducer :: Maybe (IO StreamContent)
+  -- ^ An action that retrieves the next chunk of content to send to the
+  -- remote endpoint.
   }
 
 -- | A default set of stream options that includes a medium priority
@@ -141,9 +163,7 @@ data StreamOptions = StreamOptions {
 defaultStreamOptions :: StreamOptions
 defaultStreamOptions = StreamOptions {
   streamOptsPriority = Priority 4,
-  streamOptsDataProducer = return Nothing,
-  streamOptsHeaderConsumer = const $ return (),
-  streamOptsDataConsumer = return . maybe 0 (fromIntegral . B.length)
+  streamOptsProducer = Nothing
   }
 
 -- | Sends a WINDOW_UPDATE frame for a given stream on a given
@@ -213,7 +233,10 @@ data Connection =
                -- ^ The priority channel used to hold out-going frames.
                connPingHandlers :: IORef (DM.Map PingID (IO ())),
                -- ^ Callbacks registered for PING frames expected from the server.
+               connInitialDataWindowSize :: IORef Int,
+               -- ^ The starting size for the flow control data window on a stream.
                connStreams :: IORef (DM.Map StreamID Stream)
+               -- ^ The collection of active streams on the connection.
              }
 
 -- | The state of activity on a connection.
@@ -240,24 +263,20 @@ touch conn = do
         _ -> s,
      ())
 
+defaultInitialDataWindowSize :: Int
+defaultInitialDataWindowSize = 64 * 1024
+
 -- | State associated with a particular stream.
 data Stream =
   Stream { ssStreamID :: StreamID
            -- ^ The stream ID for this stream.
          , ssPriority :: Priority
            -- ^ The priority for data frames sent on this stream.
-         , ssDataProducer :: IO (Maybe ByteString)
-           -- ^ An IO action that fetches the next chunk of data to
-           -- send to the server. A result of 'Nothing' indicates that
-           -- there is no more data.
-         , ssHeaderConsumer :: Maybe [(HeaderName, HeaderValue)] -> IO ()
-           -- ^ An IO action that consumes the next batch of headers
-           -- available from the remote endpoint. 'Nothing' signals
-           -- that there are no more headers.
-         , ssDataConsumer :: Maybe ByteString -> IO DeltaWindowSize
-           -- ^ An IO action that consumes the next chunk of data
-           -- available from the remote endpoint. 'Nothing' signals
-           -- that there is no more data.
+         , ssOutgoingWindowSize :: MSemN Int
+           -- ^ A quantity semaphore representing the flow control
+           -- window size on the remote endpoint.
+         , ssIncomingBuffer :: BoundedBuffer StreamContent
+           -- ^ A buffer for incoming stream contents.
          }
 
 -- | Estimates the round-trip time on a connection by measuring the
@@ -324,13 +343,40 @@ removePingHandler conn pingID =
 addStream :: Connection
              -> StreamID
              -> Priority
-             -> IO (Maybe ByteString)
-             -> (Maybe [(HeaderName, HeaderValue)] -> IO ())
-             -> (Maybe ByteString -> IO DeltaWindowSize)
-             -> IO ()
-addStream conn sid priority dataProducer headerConsumer dataConsumer =
-  atomicModifyIORef (connStreams conn) $ \sm ->
-  (DM.insert sid (Stream sid priority dataProducer headerConsumer dataConsumer) sm, ())
+             -> Maybe (IO StreamContent)
+             -> IO (IO StreamContent)
+addStream conn sid priority maybeProducer = do
+  dws <- getInitialDataWindowSize conn
+  dwsSem <- MSemN.new dws
+  buf <- BB.new dws
+  s <- atomicModifyIORef (connStreams conn) $ \sm ->
+    let s = Stream sid priority dwsSem buf
+    in (DM.insert sid s sm, s)
+  maybe (return ()) (void . forkIO . contentPusher s) maybeProducer
+  return (contentPuller s)
+  where contentPusher s producer = do
+          -- TODO: if there is an exception, we should signal an
+          -- internal error to the remote endpoint, and tear down the
+          -- stream
+          content <- producer
+          MSemN.wait (ssOutgoingWindowSize s) (size content)
+          queueContent content
+          unless (isLast content) (contentPusher s producer)
+          where queueContent content =
+                  let last = isLast content
+                  in forContent (queueHeaders last) (queueData last) content
+                queueHeaders last headerBlock =
+                  let flags = packFlags (if last then [HeadersFlagFin] else [])
+                  in queueFrame conn sprio (headersFrame conn flags sid headerBlock)
+                queueData last bytes =
+                  let flags = packFlags (if last then [DataFlagFin] else [])
+                  in queueFrame conn sprio (dataFrame sid flags bytes)
+                sprio = StreamPriority (ssPriority s)
+                sid = ssStreamID s
+        contentPuller s = do
+          content <- BB.remove (ssIncomingBuffer s)
+          sendWindowUpdate conn s (fromIntegral $ size content)
+          return content
 
 removeStream :: Connection -> StreamID -> IO ()
 removeStream conn sid =
@@ -374,6 +420,7 @@ setupConnection ep cKey nc =
      nextStreamIDRef <- newIORef (epFirstStreamID ep)
      lastStreamIDRef <- newIORef (StreamID 0)
      pingHandlersRef <- newIORef DM.empty
+     dataWindowSizeRef <- newIORef defaultInitialDataWindowSize
      streamsRef <- newIORef DM.empty
      inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
      deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
@@ -390,6 +437,7 @@ setupConnection ep cKey nc =
                              connDeflate = deflate,
                              connOutgoing = outgoing,
                              connPingHandlers = pingHandlersRef,
+                             connInitialDataWindowSize = dataWindowSizeRef,
                              connStreams = streamsRef }
      -- TODO: record the thread IDs in an IORef in the connection,
      -- so we can forcibly terminate the reading thread should it
@@ -449,6 +497,15 @@ synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
                       (maybe noSlot id maybeSlot)
                       (HeaderBlock headers))
 
+-- | Creates a DATA frame for a particular stream.
+dataFrame :: StreamID -> Flags DataFlag -> ByteString -> Frame
+dataFrame sid flags = ADataFrame . DataFrame sid flags
+
+-- | Creates a HEADERS frame for this connection and a particular stream.
+headersFrame :: Connection -> Flags HeadersFlag -> StreamID -> HeaderBlock -> Frame
+headersFrame conn flags sid =
+  controlFrame conn . AHeadersFrame . HeadersFrame flags sid
+
 -- | Creates a WINDOW_UPDATE frame for this connection and a
 -- particular stream.
 windowUpdateFrame :: Connection -> StreamID -> DeltaWindowSize -> Frame
@@ -484,6 +541,15 @@ getLastAcceptedStreamID = readIORef . connLastAcceptedStreamID
 setLastAcceptedStreamID :: Connection -> StreamID -> IO ()
 setLastAcceptedStreamID conn streamID =
   atomicModifyIORef (connLastAcceptedStreamID conn) (const (streamID, ()))
+
+-- | Gets the initial data window size for new streams.
+getInitialDataWindowSize :: Connection -> IO Int
+getInitialDataWindowSize = readIORef . connInitialDataWindowSize
+
+-- | Sets the initial data window size for new streams.
+setInitialDataWindowSize :: Connection -> Int -> IO ()
+setInitialDataWindowSize conn size =
+  atomicModifyIORef (connInitialDataWindowSize conn) (const (size, ()))
 
 -- | Read frames from the server, updating the connection state as the
 -- frames are received.
@@ -524,8 +590,54 @@ defaultEndpointInputFrameHandlers conn =
         else
           -- we echo the exact same frame as the response
           queueFrame conn ASAP (controlFrame conn $ APingFrame p) >>
-          queueFlush conn ASAP
+          queueFlush conn ASAP,
+    handleDataFrame = forDataFrame,
+    handleSynReplyFrame = forSynReplyFrame,
+    handleHeadersFrame = forHeadersFrame,
+    handleWindowUpdateFrame = forWindowUpdateFrame
     }
+  where forDataFrame d =
+          let sid = streamID d
+              flags = dataFlags d
+              bytes = dataBytes d
+          in lookupStream conn sid >>=
+             maybe
+             (streamError $ "DATA frame for unknown stream " ++ show sid)
+             (\s -> do
+                 queued <- BB.tryAdd (ssIncomingBuffer s) (moreData bytes (isSet DataFlagFin flags))
+                 -- TODO: this should result in a RST_STREAM with a
+                 -- status of 'flow control error', and then tearing
+                 -- down the stream
+                 unless queued (error "don't know how to handle this"))
+        forSynReplyFrame _ sr =
+          let flags = synReplyFlags sr
+              sid = synReplyNewStreamID sr
+              headerBlock = synReplyHeaderBlock sr
+          in lookupStream conn sid >>=
+             maybe
+             (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
+             (\s -> do
+                 BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet SynReplyFlagFin flags)))
+        forHeadersFrame _ h =
+          let sid = headersStreamID h
+              flags = headersFlags h
+              headerBlock = headersHeaderBlock h
+          in lookupStream conn sid >>=
+             maybe
+             (streamError ("HEADERS for unknown stream ID " ++ show sid))
+             (\s -> do
+                 BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet HeadersFlagFin flags)))
+        forWindowUpdateFrame _ w =
+          let sid = windowUpdateStreamID w
+              ds = windowUpdateDeltaWindowSize w
+          in lookupStream conn sid >>=
+             maybe
+             (streamError ("WINDOW_UPDATE for unknown stream ID " ++ show sid))
+             (\s -> MSemN.signal (ssOutgoingWindowSize s) (fromIntegral ds))
+        -- TODO: a stream error may require a RST_STREAM or a GOAWAY
+        -- frame and then some cleanup
+        streamError msg = logErr msg
+        logErr = logMessage conn
 
 -- | Sends an error message to the logger for a connection.
 logMessage :: Connection -> String -> IO ()
