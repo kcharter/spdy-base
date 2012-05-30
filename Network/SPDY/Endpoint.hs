@@ -41,6 +41,7 @@ module Network.SPDY.Endpoint
          synStreamFrame,
          headersFrame,
          windowUpdateFrame,
+         rstStreamFrame,
          controlFrame,
          -- * Output on a stream
          OutgoingPriority(..),
@@ -554,6 +555,18 @@ windowUpdateFrame :: Connection
                      -- ^ The resulting frame.
 windowUpdateFrame conn sid =
   controlFrame conn . AWindowUpdateFrame . WindowUpdateFrame sid
+
+-- | Creates a RST_STREAM frame for a connection and stream.
+rstStreamFrame :: Connection
+                  -- ^ The connection from which to obtain the protocol version.
+                  -> StreamID
+                  -- ^ Identifies the stream being terminated.
+                  -> TerminationStatus
+                  -- ^ Identifies the reason for the termination.
+                  -> Frame
+                  -- ^ The resulting frame.
+rstStreamFrame conn sid =
+  controlFrame conn . ARstStreamFrame . RstStreamFrame sid
 
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrame -> Frame
