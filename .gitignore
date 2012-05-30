@@ -6,3 +6,5 @@ sping
 sget
 tls-server
 tls-client
+sserve
+*.pem
