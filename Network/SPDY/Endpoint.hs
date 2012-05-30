@@ -468,25 +468,47 @@ closeConnection conn maybeGoAwayStatus = do
           return (foldr DM.delete m keys, ())
 
 -- | Creates a client-initiated PING frame for this connection.
-pingFrame :: Connection -> IO (PingID, Frame)
+pingFrame :: Connection
+             -- ^ The connection from which to obtain the protocol
+             -- version and the ping ID.
+             -> IO (PingID, Frame)
+             -- ^ The resulting ping ID and frame. The ping ID is
+             -- carried in the frame, but it is included as a
+             -- convenience.
 pingFrame conn = do
   id <- nextPingID conn
   return (id, controlFrame conn $ APingFrame $ PingFrame id)
 
 -- | Creates a GO_AWAY frame for this connection, with a given status.
-goAwayFrame :: Connection -> GoAwayStatus -> IO Frame
+goAwayFrame :: Connection
+               -- ^ The connection from which to obtain the protocol version.
+               -> GoAwayStatus
+               -- ^ The reason for tearing down the connection.
+               -> IO Frame
+               -- ^ The resulting frame.
 goAwayFrame conn goAwayStatus = do
   lastStreamID <- getLastAcceptedStreamID conn
   return $ controlFrame conn $ AGoAwayFrame $ GoAwayFrame lastStreamID goAwayStatus
 
 -- | Creates a SYN_STREAM frame, used to initiate a new stream.
 synStreamFrame :: Connection
+                  -- ^ The connnection from which to obtain the
+                  -- protocol version and the new stream ID.
                   -> Flags SynStreamFlag
+                  -- ^ Flags for the frame.
                   -> Maybe StreamID
+                  -- ^ An optional associated stream ID, used in server push streams.
                   -> Priority
+                  -- ^ The priority of the new stream.
                   -> Maybe Slot
+                  -- ^ An optional credential slot to use for
+                  -- authenticating at the remote end.
                   -> [(HeaderName, HeaderValue)]
+                  -- ^ The headers to include in the frame.
                   -> IO (StreamID, Frame)
+                  -- ^ The resulting stream ID and frame. While the ID
+                  -- is also in the frame, it's included in the result
+                  -- as a convenience.
 synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
   streamID <- nextStreamID conn
   return $ (streamID, controlFrame conn $ ASynStreamFrame $ SynStreamFrame
@@ -496,17 +518,40 @@ synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
                       (HeaderBlock headers))
 
 -- | Creates a DATA frame for a particular stream.
-dataFrame :: StreamID -> Flags DataFlag -> ByteString -> Frame
+dataFrame :: StreamID
+             -- ^ Identifies the stream to which the data belongs.
+             -> Flags DataFlag
+             -- ^ Flags for the frame.
+             -> ByteString
+             -- ^ The data itself.
+             -> Frame
+             -- ^ The resulting frame.
 dataFrame sid flags = ADataFrame . DataFrame sid flags
 
 -- | Creates a HEADERS frame for this connection and a particular stream.
-headersFrame :: Connection -> Flags HeadersFlag -> StreamID -> HeaderBlock -> Frame
+headersFrame :: Connection
+                -- ^ The connection from which to obtain the protocol version.
+                -> Flags HeadersFlag
+                -- ^ Flags for the frame.
+                -> StreamID
+                -- ^ Identifies the stream to which the headers belong.
+                -> HeaderBlock
+                -- ^ The headers to include in the frame.
+                -> Frame
+                -- ^ The resulting frame.
 headersFrame conn flags sid =
   controlFrame conn . AHeadersFrame . HeadersFrame flags sid
 
 -- | Creates a WINDOW_UPDATE frame for this connection and a
 -- particular stream.
-windowUpdateFrame :: Connection -> StreamID -> DeltaWindowSize -> Frame
+windowUpdateFrame :: Connection
+                     -- ^ The connection from which to obtain the protocol version.
+                     -> StreamID
+                     -- ^ Identifies the stream to which the update pertains.
+                     -> DeltaWindowSize
+                     -- ^ The change in data window size for this endpoint.
+                     -> Frame
+                     -- ^ The resulting frame.
 windowUpdateFrame conn sid =
   controlFrame conn . AWindowUpdateFrame . WindowUpdateFrame sid
 
