@@ -100,8 +100,8 @@ initiateStream :: Client
                   -- ^ The client on which to initiate the stream.
                   -> ConnectionKey
                   -- ^ Identifies the connection on which to initiate the stream.
-                  -> [(HeaderName, HeaderValue)]
-                  -- ^ The list of headers to send in the SYN_STREAM frame.
+                  -> HeaderBlock
+                  -- ^ The headers to send in the SYN_STREAM frame.
                   -> StreamOptions
                   -- ^ Other options for the stream.
                   -> IO (StreamID, Maybe (StreamContent -> IO ()), IO StreamContent)
@@ -109,12 +109,12 @@ initiateStream :: Client
                   -- request content pusher, a response content
                   -- puller. If the options indicated this was a
                   -- half-closed stream, the pusher will be 'Nothing'.
-initiateStream client cKey headers opts = do
+initiateStream client cKey headerBlock opts = do
   conn <- getConnection client cKey
   let halfClosed = streamOptsHalfClosed opts
       flags = packFlags (if halfClosed then [SynStreamFlagFin] else [])
       prio = streamOptsPriority opts
-  (sid, initFrame) <- synStreamFrame conn flags Nothing prio Nothing headers
+  (sid, initFrame) <- synStreamFrame conn flags Nothing prio Nothing headerBlock
   (maybeRequestPusher, responseProducer) <- addStream conn sid prio halfClosed
   let sprio = StreamPriority prio
   queueFrame conn sprio initFrame

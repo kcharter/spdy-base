@@ -503,19 +503,19 @@ synStreamFrame :: Connection
                   -> Maybe Slot
                   -- ^ An optional credential slot to use for
                   -- authenticating at the remote end.
-                  -> [(HeaderName, HeaderValue)]
+                  -> HeaderBlock
                   -- ^ The headers to include in the frame.
                   -> IO (StreamID, Frame)
                   -- ^ The resulting stream ID and frame. While the ID
                   -- is also in the frame, it's included in the result
                   -- as a convenience.
-synStreamFrame conn flags maybeAssocSID priority maybeSlot headers = do
+synStreamFrame conn flags maybeAssocSID priority maybeSlot headerBlock = do
   streamID <- nextStreamID conn
   return $ (streamID, controlFrame conn $ ASynStreamFrame $ SynStreamFrame
                       flags streamID maybeAssocSID
                       priority
                       (maybe noSlot id maybeSlot)
-                      (HeaderBlock headers))
+                      headerBlock)
 
 -- | Creates a DATA frame for a particular stream.
 dataFrame :: StreamID

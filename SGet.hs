@@ -43,7 +43,8 @@ main = runCommand $ \opts _ -> do
               -- 'url' and 'scheme' in the request. It can also crash
               -- with a segmentation fault if only the 'method' and
               -- 'url' headers are present.
-              headers = [(HeaderName ":method", HeaderValue "GET"),
+              headers = HeaderBlock
+                        [(HeaderName ":method", HeaderValue "GET"),
                          (HeaderName ":path", HeaderValue $ fromString $ "/" ++ path),
                          (HeaderName ":version", HeaderValue "HTTP/1.1"),
                          (HeaderName ":host", HeaderValue $ fromString $ host ++ ":" ++ show port),
