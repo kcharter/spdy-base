@@ -595,43 +595,32 @@ defaultEndpointInputFrameHandlers conn =
     handleWindowUpdateFrame = forWindowUpdateFrame
     }
   where forDataFrame d =
-          let sid = streamID d
-              flags = dataFlags d
-              bytes = dataBytes d
-          in lookupStream conn sid >>=
-             maybe
-             (streamError $ "DATA frame for unknown stream " ++ show sid)
-             (\s -> do
-                 queued <- BB.tryAdd (ssIncomingBuffer s) (moreData bytes (isSet DataFlagFin flags))
-                 -- TODO: this should result in a RST_STREAM with a
-                 -- status of 'flow control error', and then tearing
-                 -- down the stream
-                 unless queued (error "don't know how to handle this"))
+          forStream (streamID d) "DATA" $ \s ->
+          do let flags = dataFlags d
+                 bytes = dataBytes d
+             queued <- BB.tryAdd (ssIncomingBuffer s) (moreData bytes (isSet DataFlagFin flags))
+             -- TODO: this should result in a RST_STREAM with a
+             -- status of 'flow control error', and then tearing
+             -- down the stream
+             unless queued (error "don't know how to handle this")
         forSynReplyFrame _ sr =
-          let flags = synReplyFlags sr
-              sid = synReplyNewStreamID sr
-              headerBlock = synReplyHeaderBlock sr
-          in lookupStream conn sid >>=
-             maybe
-             (streamError ("SYN_REPLY for unknown stream ID " ++ show sid))
-             (\s -> do
-                 BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet SynReplyFlagFin flags)))
+          forStream (synReplyNewStreamID sr) "SYN_REPLY" $ \s ->
+          do let flags = synReplyFlags sr
+                 headerBlock = synReplyHeaderBlock sr
+             BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet SynReplyFlagFin flags))
         forHeadersFrame _ h =
-          let sid = headersStreamID h
-              flags = headersFlags h
-              headerBlock = headersHeaderBlock h
-          in lookupStream conn sid >>=
-             maybe
-             (streamError ("HEADERS for unknown stream ID " ++ show sid))
-             (\s -> do
-                 BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet HeadersFlagFin flags)))
+          forStream (headersStreamID h) "HEADERS" $ \s ->
+          do let flags = headersFlags h
+                 headerBlock = headersHeaderBlock h
+             BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet HeadersFlagFin flags))
         forWindowUpdateFrame _ w =
-          let sid = windowUpdateStreamID w
-              ds = windowUpdateDeltaWindowSize w
-          in lookupStream conn sid >>=
-             maybe
-             (streamError ("WINDOW_UPDATE for unknown stream ID " ++ show sid))
-             (\s -> MSemN.signal (ssOutgoingWindowSize s) (fromIntegral ds))
+          forStream (windowUpdateStreamID w) "WINDOW_UPDATE" $ \s ->
+          MSemN.signal (ssOutgoingWindowSize s) (fromIntegral $ windowUpdateDeltaWindowSize w)
+        forStream sid frameName action =
+          lookupStream conn sid >>=
+          maybe
+          (streamError (frameName ++ " for unknown stream ID " ++ show sid))
+          action
         -- TODO: a stream error may require a RST_STREAM or a GOAWAY
         -- frame and then some cleanup
         streamError msg = logErr msg
