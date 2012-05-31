@@ -12,7 +12,6 @@ module Network.SPDY.Client (ClientOptions(..),
                             initiateStream,
                             StreamOptions(..),
                             defaultStreamOptions,
-                            updateWindow,
                             ConnectionKey(..),
                             Origin(..),
                             Scheme(..),
@@ -120,43 +119,6 @@ initiateStream client cKey headerBlock opts = do
   queueFrame conn sprio initFrame
   queueFlush conn sprio
   return (sid, maybeRequestPusher, responseProducer)
-
--- | Sends a change in the window size for a stream to the remote
--- endpoint.
---
--- This function is intended for situations in which the data consumer
--- for the stream may report a window size change of zero bytes. In
--- such cases, it's possible for the remote endpoint to reduce the
--- window to zero but never be notified when more space becomes
--- available. If the remote endpoint respects SPDY flow control, it
--- will stop transferring data on the stream, and the stream will
--- stall.
---
--- If your data consumer always returns a positive change in window
--- size, then you shouldn't need to use this function. Otherwise, you
--- may need to use it to notify the remote endpoint when there is room
--- to accept more data.
-updateWindow :: Client
-                -- ^ The client.
-                -> ConnectionKey
-                -- ^ Identifies which connection within the client.
-                -> StreamID
-                -- ^ Identifies which stream within the connection.
-                -> DeltaWindowSize
-                -- ^ The change in window size, i.e. the number of
-                -- additional bytes that can now be transmitted by the
-                -- remote endpoint. May be zero, in which case this
-                -- action has no effect.
-                -> IO ()
-updateWindow c cKey sid dws = do
-  conn <- getConnection c cKey
-  lookupStream conn sid >>=
-    (maybe (return ()) $ \s ->
-      sendWindowUpdate conn s dws)
-
-
--- * Supporting data types
-
 
 -- | Obtains a connection, creating one if necessary.
 getConnection :: Client -> ConnectionKey -> IO Connection
