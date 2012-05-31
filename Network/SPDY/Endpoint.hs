@@ -29,7 +29,7 @@ module Network.SPDY.Endpoint
          forContent,
          StreamOptions(..),
          defaultStreamOptions,
-         Stream(..),
+         Stream,
          lookupStream,
          addStream,
          removeStream,
