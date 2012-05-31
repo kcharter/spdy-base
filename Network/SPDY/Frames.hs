@@ -224,7 +224,7 @@ data TerminationStatus =
   -- ^ The endpoint received a @SYN_REPLY@ for a stream already open.
   StreamAlreadyClosed |
   -- ^ The endpoint received a data or @SYN_REPLY@ frame for a stream
-  -- which is half-closed. |
+  -- which is half-closed.
   InvalidCredentials |
   -- ^ The server received a request for a resource whose origin does
   -- not have valid credentials in the client certificate vector.
