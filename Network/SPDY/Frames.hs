@@ -554,3 +554,104 @@ defaultIOFrameHandlers =
   , handleCredentialFrame = doNothing2 }
     where doNothing1 = const $ return ()
           doNothing2 = const $ const $ return ()
+
+-- | An enumeration of frame types. This is useful for operations that
+-- rely only on the kind of frame.
+data FrameType = Data
+               | SynStream
+               | SynReply
+               | RstStream
+               | Settings
+               | Ping
+               | GoAway
+               | Headers
+               | WindowUpdate
+               | Credential
+               deriving (Eq, Ord, Show, Read)
+
+-- | Types with an associated 'FrameType'. In particular, frames.
+class WithFrameType a where
+  frameTypeOf :: a -> FrameType
+
+-- | Returns the name of a frame type, as given in the spec.
+frameTypeName :: WithFrameType f => f -> String
+frameTypeName f =
+  case frameTypeOf f of
+    Data -> "DATA"
+    SynStream -> "SYN_STREAM"
+    SynReply -> "SYN_REPLY"
+    RstStream -> "RST_STREAM"
+    Settings -> "SETTINGS"
+    Ping -> "PING"
+    GoAway -> "GOAWAY"
+    Headers -> "HEADERS"
+    WindowUpdate -> "WINDOW_UPDATE"
+    Credential -> "CREDENTIAL"
+
+instance WithFrameType Frame where
+  frameTypeOf (ADataFrame d) = frameTypeOf d
+  frameTypeOf (AControlFrame _ c) = frameTypeOf c
+
+instance WithFrameType DataFrame where
+  frameTypeOf = const Data
+
+instance WithFrameType ControlFrame where
+  frameTypeOf (ASynStreamFrame f) = frameTypeOf f
+  frameTypeOf (ASynReplyFrame f) = frameTypeOf f
+  frameTypeOf (ARstStreamFrame f) = frameTypeOf f
+  frameTypeOf (ASettingsFrame f) = frameTypeOf f
+  frameTypeOf (APingFrame f) = frameTypeOf f
+  frameTypeOf (AGoAwayFrame f) = frameTypeOf f
+  frameTypeOf (AHeadersFrame f) = frameTypeOf f
+  frameTypeOf (AWindowUpdateFrame f) = frameTypeOf f
+  frameTypeOf (ACredentialFrame f) = frameTypeOf f
+
+instance WithFrameType SynStreamFrame where
+  frameTypeOf = const SynStream
+
+instance WithFrameType SynReplyFrame where
+  frameTypeOf = const SynReply
+
+instance WithFrameType RstStreamFrame where
+  frameTypeOf = const RstStream
+
+instance WithFrameType SettingsFrame where
+  frameTypeOf = const Settings
+
+instance WithFrameType PingFrame where
+  frameTypeOf = const Ping
+
+instance WithFrameType GoAwayFrame where
+  frameTypeOf = const GoAway
+
+instance WithFrameType HeadersFrame where
+  frameTypeOf = const Headers
+
+instance WithFrameType WindowUpdateFrame where
+  frameTypeOf = const WindowUpdate
+
+instance WithFrameType CredentialFrame where
+  frameTypeOf = const Credential
+
+-- | Types with an associated stream ID. In particular, frames that
+-- are directed at particular streams.
+class WithStream a where
+  streamOf :: a -> StreamID
+
+instance WithStream DataFrame where
+  streamOf = streamID
+
+instance WithStream SynStreamFrame where
+  streamOf = synStreamNewStreamID
+
+instance WithStream SynReplyFrame where
+  streamOf = synReplyNewStreamID
+
+instance WithStream RstStreamFrame where
+  streamOf = rstStreamTermStreamID
+
+instance WithStream HeadersFrame where
+  streamOf = headersStreamID
+
+instance WithStream WindowUpdateFrame where
+  streamOf = windowUpdateStreamID
