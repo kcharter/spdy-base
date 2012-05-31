@@ -653,7 +653,7 @@ defaultEndpointInputFrameHandlers conn =
     handleWindowUpdateFrame = forWindowUpdateFrame
     }
   where forDataFrame d =
-          forStream (streamID d) "DATA" $ \s ->
+          forStream d $ \s ->
           do let flags = dataFlags d
                  bytes = dataBytes d
              queued <- BB.tryAdd (ssIncomingBuffer s) (moreData bytes (isSet DataFlagFin flags))
@@ -662,26 +662,33 @@ defaultEndpointInputFrameHandlers conn =
              -- down the stream
              unless queued (error "don't know how to handle this")
         forSynReplyFrame _ sr =
-          forStream (synReplyNewStreamID sr) "SYN_REPLY" $ \s ->
+          forStream sr $ \s ->
           do let flags = synReplyFlags sr
                  headerBlock = synReplyHeaderBlock sr
              BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet SynReplyFlagFin flags))
         forHeadersFrame _ h =
-          forStream (headersStreamID h) "HEADERS" $ \s ->
+          forStream h $ \s ->
           do let flags = headersFlags h
                  headerBlock = headersHeaderBlock h
              BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet HeadersFlagFin flags))
         forWindowUpdateFrame _ w =
-          forStream (windowUpdateStreamID w) "WINDOW_UPDATE" $ \s ->
+          forStream w $ \s ->
           MSemN.signal (ssOutgoingWindowSize s) (fromIntegral $ windowUpdateDeltaWindowSize w)
-        forStream sid frameName action =
-          lookupStream conn sid >>=
-          maybe
-          (streamError (frameName ++ " for unknown stream ID " ++ show sid))
+        forStream :: (WithFrameType f, WithStream f) => f -> (Stream -> IO ()) -> IO ()
+        forStream frame action =
+          let sid = streamOf frame
+          in lookupStream conn sid >>=
+             maybe
+             (streamError frame (frameTypeName frame ++ " for unknown stream ID " ++ show sid))
           action
         -- TODO: a stream error may require a RST_STREAM or a GOAWAY
         -- frame and then some cleanup
-        streamError msg = logErr msg
+        streamError :: (WithFrameType f, WithStream f) => f -> String -> IO ()
+        streamError frame msg = do
+          logErr msg
+          unless (frameTypeOf frame == RstStream) $
+          -- TODO: make termination status a parameter, close stream
+            queueFrame conn ASAP (rstStreamFrame conn (streamOf frame) InvalidStream)
         logErr = logMessage conn
 
 -- | Sends an error message to the logger for a connection.
