@@ -308,7 +308,6 @@ addStream :: Connection
 addStream conn sid priority halfClosed = do
   dws <- getInitialDataWindowSize conn
   let nso = NewStreamOpts { nsoInitialWindowSize = dws
-                          , nsoPriority = priority
                           , nsoHalfClosed = halfClosed
                           , nsoOutgoingHandler = outgoingHandler
                           , nsoWindowUpdateHandler = queueWindowUpdate
@@ -327,6 +326,7 @@ addStream conn sid priority halfClosed = do
         queueWindowUpdate = sendWindowUpdate conn sid sprio
         queueReset = queueFrame conn sprio . (rstStreamFrame conn sid)
         sprio = StreamPriority priority
+
 removeStream :: Connection -> StreamID -> IO ()
 removeStream conn sid =
   atomicModifyIORef (connStreams conn) $ \sm -> (DM.delete sid sm, ())

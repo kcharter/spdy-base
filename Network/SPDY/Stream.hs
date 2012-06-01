@@ -16,7 +16,7 @@ import qualified Control.Concurrent.MSemN as MSemN
 import Control.Monad (when)
 import Data.ByteString (ByteString)
 
-import Network.SPDY.Frames (StreamID, Priority, HeaderBlock, DeltaWindowSize, TerminationStatus)
+import Network.SPDY.Frames (StreamID, HeaderBlock, DeltaWindowSize, TerminationStatus)
 import Network.SPDY.Internal.BoundedBuffer (BoundedBuffer, Sized(..))
 import qualified Network.SPDY.Internal.BoundedBuffer as BB
 
@@ -24,8 +24,6 @@ import qualified Network.SPDY.Internal.BoundedBuffer as BB
 data Stream =
   Stream { ssStreamID :: StreamID
            -- ^ The stream ID for this stream.
-         , ssPriority :: Priority
-           -- ^ The priority for data frames sent on this stream.
          , ssOutgoingWindowSize :: MSemN Int
            -- ^ A quantity semaphore representing the flow control
            -- window size on the remote endpoint.
@@ -60,7 +58,6 @@ instance Sized StreamContent where
 
 data NewStreamOpts =
   NewStreamOpts { nsoInitialWindowSize :: Int
-                , nsoPriority :: Priority
                 , nsoHalfClosed :: Bool
                 , nsoOutgoingHandler :: StreamContent -> IO ()
                 , nsoWindowUpdateHandler :: DeltaWindowSize -> IO ()
@@ -70,11 +67,10 @@ data NewStreamOpts =
 newStream :: StreamID -> NewStreamOpts -> IO (Stream, Maybe (StreamContent -> IO ()), IO StreamContent)
 newStream sid nso = do
   let dws = nsoInitialWindowSize nso
-      priority = nsoPriority nso
       halfClosed = nsoHalfClosed nso
   dwsSem <- MSemN.new dws
   buf <- BB.new dws
-  let s = Stream sid priority dwsSem buf
+  let s = Stream sid dwsSem buf
   return (s, if halfClosed then Nothing else Just (contentPusher s), contentPuller s)
   where contentPusher s content = do
           -- TODO: if there is an exception, we should signal an
