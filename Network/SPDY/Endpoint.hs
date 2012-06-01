@@ -400,6 +400,16 @@ newStream sid nso = do
           when (delta > 0) (nsoWindowUpdateHandler nso (fromIntegral delta))
           return content
 
+updateWindowSize :: Stream -> DeltaWindowSize -> IO ()
+updateWindowSize s delta =
+  MSemN.signal (ssOutgoingWindowSize s) (fromIntegral delta)
+
+addIncomingData :: Stream -> ByteString -> Bool -> IO Bool
+addIncomingData s bytes last = BB.tryAdd (ssIncomingBuffer s) (moreData bytes last)
+
+addIncomingHeaders :: Stream -> HeaderBlock -> Bool -> IO ()
+addIncomingHeaders s headers last = BB.add (ssIncomingBuffer s) (moreHeaders headers last)
+
 removeStream :: Connection -> StreamID -> IO ()
 removeStream conn sid =
   atomicModifyIORef (connStreams conn) $ \sm -> (DM.delete sid sm, ())
@@ -679,7 +689,7 @@ defaultEndpointInputFrameHandlers conn =
           forStream d $ \s ->
           do let flags = dataFlags d
                  bytes = dataBytes d
-             queued <- BB.tryAdd (ssIncomingBuffer s) (moreData bytes (isSet DataFlagFin flags))
+             queued <- addIncomingData s bytes (isSet DataFlagFin flags)
              -- TODO: this should result in a RST_STREAM with a
              -- status of 'flow control error', and then tearing
              -- down the stream
@@ -688,15 +698,14 @@ defaultEndpointInputFrameHandlers conn =
           forStream sr $ \s ->
           do let flags = synReplyFlags sr
                  headerBlock = synReplyHeaderBlock sr
-             BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet SynReplyFlagFin flags))
+             addIncomingHeaders s headerBlock (isSet SynReplyFlagFin flags)
         forHeadersFrame _ h =
           forStream h $ \s ->
           do let flags = headersFlags h
                  headerBlock = headersHeaderBlock h
-             BB.add (ssIncomingBuffer s) (moreHeaders headerBlock (isSet HeadersFlagFin flags))
+             addIncomingHeaders s headerBlock (isSet HeadersFlagFin flags)
         forWindowUpdateFrame _ w =
-          forStream w $ \s ->
-          MSemN.signal (ssOutgoingWindowSize s) (fromIntegral $ windowUpdateDeltaWindowSize w)
+          forStream w $ \s -> updateWindowSize s (windowUpdateDeltaWindowSize w)
         forStream :: (WithFrameType f, WithStream f) => f -> (Stream -> IO ()) -> IO ()
         forStream frame action =
           let sid = streamOf frame
