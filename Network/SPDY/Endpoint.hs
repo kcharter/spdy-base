@@ -128,40 +128,28 @@ endpoint options = do
     }
 
 -- | The various kinds of content that can arrive on or be sent on a stream.
-data StreamContent =
-  HeadersOrData !(Either HeaderBlock ByteString) !Bool |
-  AWindowUpdate !DeltaWindowSize |
-  AReset !TerminationStatus deriving (Eq, Show, Read)
+data StreamContent = StreamContent !(Either HeaderBlock ByteString) !Bool
+                   deriving (Eq, Show, Read)
 
 -- | Creates stream content from a header block.
 moreHeaders :: HeaderBlock -> Bool -> StreamContent
-moreHeaders headers last = HeadersOrData (Left headers) last
+moreHeaders headers last = StreamContent (Left headers) last
 
 -- | Creates stream content from a chunk of data.
 moreData :: ByteString -> Bool -> StreamContent
-moreData bytes last = HeadersOrData (Right bytes) last
+moreData bytes last = StreamContent (Right bytes) last
 
 -- | Indicates whether this is the last content on the stream from the originating side.
 isLast :: StreamContent -> Bool
-isLast (HeadersOrData _ b) = b
-isLast (AWindowUpdate _) = False
-isLast (AReset _) = True
+isLast (StreamContent _ b) = b
 
 -- | Processes stream content.
-forContent :: (HeaderBlock -> Bool -> a)
-              -> (ByteString -> Bool -> a)
-              -> (DeltaWindowSize -> a)
-              -> (TerminationStatus -> a)
-              -> StreamContent -> a
-forContent forHeaders forData forWindowUpdate forReset content =
-  case content of
-    HeadersOrData c last -> either forHeaders forData c last
-    AWindowUpdate d ->  forWindowUpdate d
-    AReset s -> forReset s
+forContent :: (HeaderBlock -> Bool -> a) -> (ByteString -> Bool -> a) -> StreamContent -> a
+forContent forHeaders forData (StreamContent c last) =
+  either forHeaders forData c last
 
 instance Sized StreamContent where
-  size (HeadersOrData hd _) = either (const 0) size hd
-  size _ = 0
+  size (StreamContent c _) = either (const 0) size c
 
 -- | Options for initiating streams.
 data StreamOptions = StreamOptions {
@@ -359,12 +347,17 @@ addStream :: Connection
              -> IO (Maybe (StreamContent -> IO ()), IO StreamContent)
 addStream conn sid priority halfClosed = do
   dws <- getInitialDataWindowSize conn
-  let nso = NewStreamOpts dws priority halfClosed outgoingHandler
+  let nso = NewStreamOpts { nsoInitialWindowSize = dws
+                          , nsoPriority = priority
+                          , nsoHalfClosed = halfClosed
+                          , nsoOutgoingHandler = outgoingHandler
+                          , nsoWindowUpdateHandler = queueWindowUpdate
+                          , nsoResetHandler = queueReset }
   (s, maybePusher, puller) <- newStream sid nso
   atomicModifyIORef (connStreams conn) $ \sm ->
     (DM.insert sid s sm, ())
   return (maybePusher, puller)
-  where outgoingHandler = forContent queueHeaders queueData queueWindowUpdate queueReset
+  where outgoingHandler = forContent queueHeaders queueData
         queueHeaders headerBlock last =
           let flags = packFlags (if last then [HeadersFlagFin] else [])
           in queueFrame conn sprio (headersFrame conn flags sid headerBlock)
@@ -379,7 +372,9 @@ data NewStreamOpts =
   NewStreamOpts { nsoInitialWindowSize :: Int
                 , nsoPriority :: Priority
                 , nsoHalfClosed :: Bool
-                , nsoHandleOutgoing :: StreamContent -> IO ()
+                , nsoOutgoingHandler :: StreamContent -> IO ()
+                , nsoWindowUpdateHandler :: DeltaWindowSize -> IO ()
+                , nsoResetHandler :: TerminationStatus -> IO ()
                 }
 
 newStream :: StreamID -> NewStreamOpts -> IO (Stream, Maybe (StreamContent -> IO ()), IO StreamContent)
@@ -398,11 +393,11 @@ newStream sid nso = do
           -- TODO: if we have previously seen the end of the content,
           -- then we should throw an exception
           MSemN.wait (ssOutgoingWindowSize s) (size content)
-          nsoHandleOutgoing nso content
+          nsoOutgoingHandler nso content
         contentPuller s = do
           content <- BB.remove (ssIncomingBuffer s)
           let delta = size content
-          when (delta > 0) (nsoHandleOutgoing nso (AWindowUpdate $ fromIntegral delta))
+          when (delta > 0) (nsoWindowUpdateHandler nso (fromIntegral delta))
           return content
 
 removeStream :: Connection -> StreamID -> IO ()

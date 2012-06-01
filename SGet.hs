@@ -62,15 +62,13 @@ main = runCommand $ \opts _ -> do
                   revHeaderBlocks' <- forContent
                                       (forHeaders revHeaderBlocks)
                                       (forData revHeaderBlocks)
-                                      (forOthers revHeaderBlocks)
-                                      (forOthers revHeaderBlocks) content
+                                      content
                   (if isLast content
                    then return revHeaderBlocks'
                    else getResponse revHeaderBlocks' producer)
                 forHeaders revHeaderBlocks headers _ = return (headers:revHeaderBlocks)
                 forData revHeaderBlocks bytes _ =
                   B.putStr bytes >> return revHeaderBlocks
-                forOthers revHeaderBlocks _ = return revHeaderBlocks
                 dumpHeaderBlock (HeaderBlock pairs) =
                   mapM_ printHeader pairs
                 printHeader (HeaderName name, HeaderValue value) =
