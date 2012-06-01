@@ -33,6 +33,7 @@ Library
                        Network.SPDY.NetworkConnection,
                        Network.SPDY.Serialize,
                        Network.SPDY.Server,
+                       Network.SPDY.Stream,
                        Network.SPDY.Client,
                        Network.SPDY.Url
   Other-modules:       Network.SPDY.Internal.BoundedBuffer,
