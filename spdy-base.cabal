@@ -41,7 +41,7 @@ Library
                        Network.SPDY.Internal.PriorityChan,
                        Network.SPDY.Internal.Serialize,
                        Network.SPDY.Internal.ToWord8
-  Build-depends:       SafeSemaphore >= 0.7 && < 1,
+  Build-depends:       SafeSemaphore == 0.7.0,
                        attoparsec >= 0.10 && < 1,
                        base >= 3 && < 5,
                        blaze-builder >= 0.3 && < 1,
@@ -54,8 +54,8 @@ Library
                        network >= 2.3 && < 3,
                        time >= 1.2 && < 2,
                        tls == 0.9.0,
-                       tls-extra >= 0.4.4 && < 1,
-                       zlib-bindings >= 0.0.3 && < 0.1
+                       tls-extra == 0.4.4,
+                       zlib-bindings == 0.0.3
   GHC-Options:         -W
 
   -- Modules not exported by this package.
@@ -69,7 +69,7 @@ Test-Suite tests
   main-is:              test/Main.hs
   hs-source-dirs:       ".", test
   build-depends:        QuickCheck >= 2 && <= 3,
-                        SafeSemaphore >= 0.7 && < 1,
+                        SafeSemaphore == 0.7.0,
                         attoparsec >= 0.10 && < 1,
                         base >= 3 && < 5,
                         blaze-builder >= 0.3 && < 1,
@@ -82,8 +82,8 @@ Test-Suite tests
                         network >= 2.3 && < 3,
                         time >= 1.2 && < 2,
                         tls == 0.9.0,
-                        tls-extra >= 0.4.4 && < 1,
-                        zlib-bindings >= 0.0.3 && < 0.1,
+                        tls-extra == 0.4.4,
+                        zlib-bindings == 0.0.3,
                         test-framework >= 0.5 && < 1,
                         test-framework-quickcheck2 >= 0.2 && < 1
   GHC-Options:         -W

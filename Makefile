@@ -2,8 +2,9 @@
 
 .PHONY: all clean
 
-GHC=ghc
-GHC_FLAGS=-W -odir tmp -hidir tmp -O -package-conf cabal-dev/packages-7.0.4.conf -hide-package monads-tf
+GHC_VERSION=7.4.1
+GHC=ghc-$(GHC_VERSION)
+GHC_FLAGS=-W -odir tmp -hidir tmp -O -package-conf cabal-dev/packages-$(GHC_VERSION).conf -hide-package monads-tf
 PROGS=sping sget sget-prof tls-server tls-client sserve
 
 all: $(PROGS)
