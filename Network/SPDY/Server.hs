@@ -4,6 +4,7 @@ module Network.SPDY.Server
        ( -- * Creating servers
          ServerOptions(..),
          defaultServerOptions,
+         http1_1NotFound,
          Server,
          server,
          -- * Accepting incoming connections
@@ -30,15 +31,28 @@ import Network.SPDY.Frames
 import Network.SPDY.NetworkConnection (NetworkConnection, fromHandle, fromTLSCtx)
 
 data ServerOptions =
-  ServerOptions { soptConnectionTimeoutSeconds :: Maybe Int
+  ServerOptions { soptConnectionTimeoutSeconds :: Maybe Int,
                   -- ^ The number of seconds without any activity
                   -- before closing a connection. If 'Nothing', there
                   -- is no timeout.
+                  soptIncomingRequestHandler :: RequestHandler
+                  -- ^ The handler for incoming requests.
                   }
 
+-- | Default options with no connection timeouts and a request handler
+-- that always responds with an HTTP 1.1 404 error.
 defaultServerOptions :: ServerOptions
 defaultServerOptions =
-  ServerOptions { soptConnectionTimeoutSeconds = Nothing }
+  ServerOptions { soptConnectionTimeoutSeconds = Nothing,
+                  soptIncomingRequestHandler = http1_1NotFound }
+
+-- | Responds to all requests with an HTTP 1.1 404 response. This is a
+-- reasonable default for implementing HTTP-over-SPDY servers.
+http1_1NotFound :: RequestHandler
+http1_1NotFound _ _ =
+  return (HeaderBlock [ (HeaderName ":status", HeaderValue "404 Not found"),
+                        (HeaderName ":version", HeaderValue "HTTP/1.1") ],
+          Nothing)
 
 -- | A SPDY server, and endpoint which accepts incoming network
 -- connections and serves content requests.
@@ -51,10 +65,11 @@ data Server =
 -- | Creates a SPDY server with the given options.
 server :: ServerOptions -> IO Server
 -- TODO respect the connection timeout in the server options
-server _ = do
+server options = do
   ep <- endpoint $ EndpointOptions {
     epOptsFirstPingID = PingID 0,
     epOptsFirstStreamID = StreamID 2,
+    epOptsIncomingRequestHandler = soptIncomingRequestHandler options,
     epOptsInputFrameHandlers = defaultEndpointInputFrameHandlers
     }
   return $ Server { serverEndpoint = ep }

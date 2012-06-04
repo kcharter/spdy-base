@@ -3,6 +3,7 @@
 
 module Network.SPDY.Endpoint
        ( -- * Creating endpoints
+         RequestHandler,
          Endpoint,
          EndpointOptions(..),
          endpoint,
@@ -54,7 +55,7 @@ module Network.SPDY.Endpoint
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, putMVar, takeMVar)
 import Control.Exception (throw, finally)
-import Control.Monad (when, unless)
+import Control.Monad (when, unless, void)
 import Data.Attoparsec.ByteString (parse, IResult(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -84,6 +85,21 @@ import Network.SPDY.Serialize
 import Network.SPDY.Stream
 import Network.SPDY.Url
 
+-- | A function that creates a response from an incoming request.
+type RequestHandler =
+  HeaderBlock
+  -- ^ The headers from the incoming request, i.e. from a SYN_STREAM frame.
+  -> Maybe (IO StreamContent)
+  -- ^ An optional action for fetching the next piece of incoming
+  -- content for the request. Will be 'Nothing' if and only if the
+  -- remote endpoint requested a half-closed stream.
+  -> IO (HeaderBlock, Maybe ((StreamContent -> IO ()) -> IO ()))
+  -- ^ The initial headers for the responding SYN_REPLY frame, and an
+  -- optional function that takes a content pusher and produces an
+  -- action that pushes the remaining content for the response. Should
+  -- be nothing if and only if the response has no content other than
+  -- the initial headers.
+
 -- | A SPDY endpoint, i.e. a client or server. This type captures
 -- functionality that is common to clients and servers.
 data Endpoint =
@@ -94,6 +110,8 @@ data Endpoint =
     -- ^ The first ping ID on a new connection.
     epFirstStreamID :: StreamID,
     -- ^ The first stream ID on a new connection.
+    epIncomingRequestHandler :: RequestHandler,
+    -- ^ Handles incoming stream requests.
     epInputFrameHandlers :: Connection -> FrameHandlers (IO ())
     -- ^ Creates input frame handlers for a connection.
     }
@@ -108,6 +126,8 @@ data EndpointOptions =
     -- ^ The first stream ID to issue on a connection. For a client,
     -- this must be odd, and for a server it must be even and
     -- positive.
+    epOptsIncomingRequestHandler :: RequestHandler,
+    -- ^ The handler for incoming requests.
     epOptsInputFrameHandlers :: Connection -> FrameHandlers (IO ())
     -- ^ A function to create handlers for frames from the remote
     -- endpoint on the other end of a connection.
@@ -121,6 +141,7 @@ endpoint options = do
     epConnectionMapMVar = cmapMVar,
     epFirstPingID = epOptsFirstPingID options,
     epFirstStreamID = epOptsFirstStreamID options,
+    epIncomingRequestHandler = epOptsIncomingRequestHandler options,
     epInputFrameHandlers = epOptsInputFrameHandlers options
     }
 
@@ -468,6 +489,11 @@ synStreamFrame conn flags maybeAssocSID priority maybeSlot headerBlock = do
                       (maybe noSlot id maybeSlot)
                       headerBlock)
 
+-- | Creates a SYN_REPLY frame for a new stream in the enclosing connection.
+synReplyFrame :: Connection -> Flags SynReplyFlag -> StreamID -> HeaderBlock -> Frame
+synReplyFrame conn flags sid =
+  controlFrame conn . ASynReplyFrame . SynReplyFrame flags sid
+
 -- | Creates a DATA frame for a particular stream.
 dataFrame :: StreamID
              -- ^ Identifies the stream to which the data belongs.
@@ -598,6 +624,7 @@ defaultEndpointInputFrameHandlers conn =
           queueFrame conn ASAP (controlFrame conn $ APingFrame p) >>
           queueFlush conn ASAP,
     handleDataFrame = forDataFrame,
+    handleSynStreamFrame = forSynStreamFrame,
     handleSynReplyFrame = forSynReplyFrame,
     handleHeadersFrame = forHeadersFrame,
     handleWindowUpdateFrame = forWindowUpdateFrame
@@ -611,6 +638,31 @@ defaultEndpointInputFrameHandlers conn =
              -- status of 'flow control error', and then tearing
              -- down the stream
              unless queued (error "don't know how to handle this")
+        forSynStreamFrame _ ss =
+          let sid = streamOf ss
+              flags = synStreamFlags ss
+              halfClosed = isSet SynStreamFlagFin flags
+              handler = epIncomingRequestHandler $ connEndpoint conn
+              prio = synStreamPriority ss
+              sprio = StreamPriority prio
+              headers = synStreamHeaderBlock ss
+              startNewStream = do
+                -- TODO: should addStream take another argument saying
+                -- whether the remote side is half-closed?
+                (Just pusher, puller) <- addStream conn sid prio False
+                void $ forkIO $ do
+                  -- TODO: what about the unidirectional flag?
+                  -- TODO: catch exceptions when pushing content
+                  (respHeaders, maybeRespRest) <- handler headers (if halfClosed then Nothing else Just puller)
+                  let respFlags = packFlags (maybe [SynReplyFlagFin] (const []) maybeRespRest)
+                  queueFrame conn sprio (synReplyFrame conn respFlags sid respHeaders)
+                  maybe (return ()) ($ pusher) maybeRespRest
+                  queueFlush conn sprio
+                  removeStream conn sid
+          in lookupStream conn sid >>=
+             maybe
+             startNewStream
+             (\_ -> queueFrame conn ASAP (rstStreamFrame conn sid ProtocolError))
         forSynReplyFrame _ sr =
           forStream sr $ \s ->
           do let flags = synReplyFlags sr
