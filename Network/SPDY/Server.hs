@@ -4,9 +4,20 @@ module Network.SPDY.Server
        ( -- * Creating servers
          ServerOptions(..),
          defaultServerOptions,
-         http1_1NotFound,
          Server,
          server,
+         -- * Tools for implementing request handlers
+         RequestHandler,
+         alwaysHttp1_1NotFound,
+         http1_1Version,
+         httpStatus,
+         HeaderBlock(..),
+         HeaderName(..),
+         HeaderValue(..),
+         StreamContent,
+         moreHeaders,
+         moreData,
+         forContent,
          -- * Accepting incoming connections
          acceptConnection,
          -- * Standard server loops
@@ -44,15 +55,21 @@ data ServerOptions =
 defaultServerOptions :: ServerOptions
 defaultServerOptions =
   ServerOptions { soptConnectionTimeoutSeconds = Nothing,
-                  soptIncomingRequestHandler = http1_1NotFound }
+                  soptIncomingRequestHandler = alwaysHttp1_1NotFound }
 
 -- | Responds to all requests with an HTTP 1.1 404 response. This is a
 -- reasonable default for implementing HTTP-over-SPDY servers.
-http1_1NotFound :: RequestHandler
-http1_1NotFound _ _ =
-  return (HeaderBlock [ (HeaderName ":status", HeaderValue "404 Not found"),
-                        (HeaderName ":version", HeaderValue "HTTP/1.1") ],
-          Nothing)
+alwaysHttp1_1NotFound :: RequestHandler
+alwaysHttp1_1NotFound _ _ =
+  return (HeaderBlock [ httpStatus 404, http1_1Version ], Nothing)
+
+-- | The @:version@ header with value @HTTP/1.1@.
+http1_1Version :: (HeaderName, HeaderValue)
+http1_1Version = (HeaderName ":version", HeaderValue "HTTP/1.1")
+
+-- | The @:status@ header with value given by an HTTP status code.
+httpStatus :: Int -> (HeaderName, HeaderValue)
+httpStatus statusCode = (HeaderName ":status", HeaderValue (C8.pack $ show statusCode))
 
 -- | A SPDY server, and endpoint which accepts incoming network
 -- connections and serves content requests.
