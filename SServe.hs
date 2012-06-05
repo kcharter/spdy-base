@@ -1,13 +1,19 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SServe where
 
 import Control.Concurrent (forkIO, killThread)
+import Control.Exception (catch, finally, IOException)
+import Control.Monad (unless)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (toLower, isSpace)
 import Network.Socket ()
-import System.IO (withFile, hSetBinaryMode, IOMode(..))
+import Prelude hiding (catch)
+import System.FilePath
+import System.IO (withFile, hSetBinaryMode, IOMode(..), openBinaryFile, hClose, hIsEOF)
 import Options
 
 import Data.Certificate.PEM (parsePEMCert, parsePEMKeyRSA)
@@ -25,13 +31,17 @@ defineOptions "Opts" $ do
   intOption "optPort" "port" 16000 $
     "The port on which to accept incoming connections. " ++
     "Default is 16000."
+  stringOption "optStaticDir" "static-dir" "." $
+    "The static directory from which to serve files."
   boolOption "optNoTLS" "no-tls" False "Don't use TLS."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do
   let port = fromIntegral $ optPort opts
       useTLS = not $ optNoTLS opts
-  theServer <- server defaultServerOptions
+      staticDir = optStaticDir opts
+      sopts = defaultServerOptions { soptIncomingRequestHandler = requestHandler staticDir }
+  theServer <- server sopts
   tid <- forkIO (if useTLS
                  then runTLSServer' port (optCertFile opts) (optKeyFile opts) theServer
                  else runSocketServer port theServer)
@@ -47,6 +57,26 @@ main = runCommand $ \opts _ -> do
             'q':_ -> killThread tid
             _ ->
               quitLoop tid
+
+requestHandler :: FilePath -> RequestHandler
+requestHandler staticDir (HeaderBlock pairs) maybePuller =
+  maybe badRequest forPath $ lookup (HeaderName ":path") pairs
+  where badRequest = return (responseHeaders 400, Nothing)
+        forPath (HeaderValue pathBytes) =
+          catch (do h <- openBinaryFile (toFilePath pathBytes) ReadMode
+                    return (responseHeaders 200, Just $ sendFile h))
+          notFound
+        toFilePath pathBytes = relativeTo staticDir (C8.unpack pathBytes)
+        relativeTo staticDir path = staticDir ++ "/" ++ path
+        sendFile h pushContent = finally loop (hClose h)
+          where loop = do chunk <- B.hGetSome h 1200
+                          isLast <- hIsEOF h
+                          pushContent $ moreData chunk isLast
+                          unless isLast loop
+        notFound :: IOException -> IO (HeaderBlock, Maybe a)
+        notFound _ = return (responseHeaders 404, Nothing)
+        responseHeaders statusCode = HeaderBlock [httpStatus statusCode, http1_1Version]
+
 
 getCertificate :: String -> IO X509
 getCertificate certFileName =
