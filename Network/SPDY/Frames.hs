@@ -444,7 +444,8 @@ data SettingID =
   deriving (Eq, Show, Read)
 
 -- | The value for a setting.
-newtype SettingValue = SettingValue Word32 deriving (Eq, Show, Read)
+newtype SettingValue = SettingValue Word32
+                     deriving (Eq, Show, Read, Ord, Num, Enum, Real, Integral)
 
 -- | When a client initiates a ping, it must use an odd-numbered
 -- ID. When the server initiates a ping, it must use an even-numbered
