@@ -117,8 +117,12 @@ instance Sized StreamContent where
 
 -- | Options for creating streams.
 data NewStreamOpts =
-  NewStreamOpts { nsoInitialWindowSize :: Int
+  NewStreamOpts { nsoInitialOutgoingWindowSize :: Int
                   -- ^ The initial data window size to use for flow control.
+                , nsoIncomingBufferSize :: Int
+                  -- ^ The size of the incoming data buffer, i.e. the
+                  -- initial size of the incoming data window for the
+                  -- stream.
                 , nsoHalfClosed :: Bool
                   -- ^ Whether to start the stream half-closed for
                   -- this endpoint. A stream is started half-closed
@@ -173,11 +177,12 @@ newStream :: StreamID
              -> IO (Stream, Maybe (StreamContent -> IO ()), IO StreamContent)
              -- ^ The resulting stream, optional push action, and pull action.
 newStream sid nso = do
-  let dws = nsoInitialWindowSize nso
+  let odws = nsoInitialOutgoingWindowSize nso
+      ibufs = nsoIncomingBufferSize nso
       halfClosed = nsoHalfClosed nso
-  dwsSem <- MSemN.new dws
-  buf <- BB.new dws
-  let s = Stream sid dwsSem buf
+  odwsSem <- MSemN.new odws
+  buf <- BB.new ibufs
+  let s = Stream sid odwsSem buf
   return (s, if halfClosed then Nothing else Just (contentPusher s), contentPuller s)
   where contentPusher s content = do
           -- TODO: if there is an exception, we should signal an

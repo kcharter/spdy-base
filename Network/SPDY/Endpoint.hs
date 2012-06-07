@@ -227,8 +227,10 @@ data Connection =
                -- ^ The priority channel used to hold out-going frames.
                connPingHandlers :: IORef (DM.Map PingID (IO ())),
                -- ^ Callbacks registered for PING frames expected from the server.
-               connInitialDataWindowSize :: IORef Int,
-               -- ^ The starting size for the flow control data window on a stream.
+               connIncomingBufferSize :: IORef Int,
+               -- ^ The starting size for the incoming flow control data window on a new stream.
+               connInitialOutgoingWindowSize :: IORef Int,
+               -- ^ The starting size for the outgoing flow control data window on a new stream.
                connStreams :: IORef (DM.Map StreamID Stream)
                -- ^ The collection of active streams on the connection.
              }
@@ -257,8 +259,8 @@ touch conn = do
         _ -> s,
      ())
 
-defaultInitialDataWindowSize :: Int
-defaultInitialDataWindowSize = 64 * 1024
+defaultInitialWindowSize :: Int
+defaultInitialWindowSize = 64 * 1024
 
 -- | Estimates the round-trip time on a connection by measuring the
 -- time to send a SPDY PING frame and receive the response from the
@@ -327,8 +329,10 @@ addStream :: Connection
              -> Bool
              -> IO (Maybe (StreamContent -> IO ()), IO StreamContent)
 addStream conn sid priority halfClosed = do
-  dws <- getInitialDataWindowSize conn
-  let nso = NewStreamOpts { nsoInitialWindowSize = dws
+  odws <- getInitialOutgoingWindowSize conn
+  ibs  <- getIncomingBufferSize conn
+  let nso = NewStreamOpts { nsoInitialOutgoingWindowSize = odws
+                          , nsoIncomingBufferSize = ibs
                           , nsoHalfClosed = halfClosed
                           , nsoOutgoingHandler = outgoingHandler
                           , nsoWindowUpdateHandler = queueWindowUpdate
@@ -390,7 +394,8 @@ setupConnection ep cKey nc =
      nextStreamIDRef <- newIORef (epFirstStreamID ep)
      lastStreamIDRef <- newIORef (StreamID 0)
      pingHandlersRef <- newIORef DM.empty
-     dataWindowSizeRef <- newIORef defaultInitialDataWindowSize
+     outgoingWindowSizeRef <- newIORef defaultInitialWindowSize
+     incomingBufSizeRef <- newIORef defaultInitialWindowSize
      streamsRef <- newIORef DM.empty
      inflate <- initInflateWithDictionary defaultSPDYWindowBits compressionDictionary
      deflate <- initDeflateWithDictionary 6 compressionDictionary defaultSPDYWindowBits
@@ -407,7 +412,8 @@ setupConnection ep cKey nc =
                              connDeflate = deflate,
                              connOutgoing = outgoing,
                              connPingHandlers = pingHandlersRef,
-                             connInitialDataWindowSize = dataWindowSizeRef,
+                             connInitialOutgoingWindowSize = outgoingWindowSizeRef,
+                             connIncomingBufferSize = incomingBufSizeRef,
                              connStreams = streamsRef }
      -- TODO: record the thread IDs in an IORef in the connection,
      -- so we can forcibly terminate the reading thread should it
@@ -574,14 +580,23 @@ setLastAcceptedStreamID :: Connection -> StreamID -> IO ()
 setLastAcceptedStreamID conn streamID =
   atomicModifyIORef (connLastAcceptedStreamID conn) (const (streamID, ()))
 
--- | Gets the initial data window size for new streams.
-getInitialDataWindowSize :: Connection -> IO Int
-getInitialDataWindowSize = readIORef . connInitialDataWindowSize
+-- | Gets the incoming buffer size for new streams.
+getIncomingBufferSize :: Connection -> IO Int
+getIncomingBufferSize = readIORef . connIncomingBufferSize
 
--- | Sets the initial data window size for new streams.
-setInitialDataWindowSize :: Connection -> Int -> IO ()
-setInitialDataWindowSize conn size =
-  atomicModifyIORef (connInitialDataWindowSize conn) (const (size, ()))
+-- | Sets the incoming buffer size for new streams.
+setIncomingBufferSize :: Connection -> Int -> IO ()
+setIncomingBufferSize conn size =
+  atomicModifyIORef (connIncomingBufferSize conn) (const (size, ()))
+
+-- | Gets the initial outgoing data window size for new streams.
+getInitialOutgoingWindowSize :: Connection -> IO Int
+getInitialOutgoingWindowSize = readIORef . connInitialOutgoingWindowSize
+
+-- | Sets the initial outgoing data window size for new streams.
+setInitialOutgoingWindowSize :: Connection -> Int -> IO ()
+setInitialOutgoingWindowSize conn size =
+  atomicModifyIORef (connInitialOutgoingWindowSize conn) (const (size, ()))
 
 -- | Read frames from the server, updating the connection state as the
 -- frames are received.
