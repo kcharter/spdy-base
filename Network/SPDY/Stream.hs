@@ -53,7 +53,7 @@ module Network.SPDY.Stream (
   -- * Operations of interest to endpoints
   addIncomingData,
   addIncomingHeaders,
-  updateWindowSize
+  updateOutgoingWindowSize
   ) where
 
 import Control.Concurrent.MSemN (MSemN)
@@ -195,8 +195,8 @@ newStream sid nso = do
 
 -- | Updates the outgoing data window size. This is meant to handle
 -- incoming WINDOW_UPDATE frames.
-updateWindowSize :: Stream -> DeltaWindowSize -> IO ()
-updateWindowSize s delta =
+updateOutgoingWindowSize :: Stream -> DeltaWindowSize -> IO ()
+updateOutgoingWindowSize s delta =
   MSemN.signal (ssOutgoingWindowSize s) (fromIntegral delta)
 
 -- | Attempts to buffer a chunk of incoming data. Will not block indefinitely.

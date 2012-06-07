@@ -674,7 +674,7 @@ defaultEndpointInputFrameHandlers conn =
                  headerBlock = headersHeaderBlock h
              addIncomingHeaders s headerBlock (isSet HeadersFlagFin flags)
         forWindowUpdateFrame _ w =
-          forStream w $ \s -> updateWindowSize s (windowUpdateDeltaWindowSize w)
+          forStream w $ \s -> updateOutgoingWindowSize s (windowUpdateDeltaWindowSize w)
         forStream :: (WithFrameType f, WithStream f) => f -> (Stream -> IO ()) -> IO ()
         forStream frame action =
           let sid = streamOf frame
