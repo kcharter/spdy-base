@@ -52,6 +52,7 @@ module Network.SPDY.Endpoint
          logMessage)
        where
 
+import Control.Arrow (first)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, newEmptyMVar, modifyMVar, putMVar, takeMVar)
 import Control.Exception (throw, finally)
@@ -73,7 +74,7 @@ import Network.SPDY (spdyVersion3) -- TODO: this will lead to an
                                    -- import cycle if we re-export
                                    -- this module in Network.SPDY
 import Network.SPDY.Error
-import Network.SPDY.Flags (Flags, isSet, packFlags)
+import Network.SPDY.Flags (Flags, isSet, packFlags, allClear)
 import Network.SPDY.Frames
 import Network.SPDY.Compression
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
@@ -420,6 +421,11 @@ setupConnection ep cKey nc =
      -- be necessary
      forkIO (readFrames conn (epInputFrameHandlers ep conn))
      forkIO (doOutgoingJobs conn)
+     incomingWindowSize <- getIncomingBufferSize conn
+     queueFrame conn ASAP (unpersistedSettingsFrame conn
+                           [(SettingsInitialWindowSize,
+                             fromIntegral incomingWindowSize)])
+     queueFlush conn ASAP
      return conn
 
 -- | Cleanly shuts down a connection. If given a 'GoAwayStatus', sends
@@ -550,6 +556,18 @@ rstStreamFrame :: Connection
 rstStreamFrame conn sid =
   controlFrame conn . ARstStreamFrame . RstStreamFrame sid
 
+-- | Creates a SETTINGS frame that makes no use of any of the persistence flags.
+unpersistedSettingsFrame :: Connection -> [(SettingID, SettingValue)] -> Frame
+unpersistedSettingsFrame conn pairs =
+  settingsFrame conn allClear (map (first addClearFlags) pairs)
+  where addClearFlags sid = SettingIDAndFlags { settingIDFlags = allClear
+                                              , settingID = sid }
+
+-- | Creates a SETTINGS frame for a connection.
+settingsFrame :: Connection -> Flags SettingsFlag -> [(SettingIDAndFlags, SettingValue)] -> Frame
+settingsFrame conn flags =
+  controlFrame conn . ASettingsFrame . SettingsFrame flags
+
 -- | Creates a control frame with the correct protocol version for this connection.
 controlFrame :: Connection -> ControlFrame -> Frame
 controlFrame conn = AControlFrame (connSPDYVersion conn)
@@ -641,6 +659,7 @@ defaultEndpointInputFrameHandlers conn =
     handleDataFrame = forDataFrame,
     handleSynStreamFrame = forSynStreamFrame,
     handleSynReplyFrame = forSynReplyFrame,
+    handleSettingsFrame = forSettingsFrame,
     handleHeadersFrame = forHeadersFrame,
     handleWindowUpdateFrame = forWindowUpdateFrame
     }
@@ -683,6 +702,11 @@ defaultEndpointInputFrameHandlers conn =
           do let flags = synReplyFlags sr
                  headerBlock = synReplyHeaderBlock sr
              addIncomingHeaders s headerBlock (isSet SynReplyFlagFin flags)
+        forSettingsFrame _ st =
+          maybe
+          (return ())
+          (setInitialOutgoingWindowSize conn . fromIntegral)
+          (extractSetting SettingsInitialWindowSize $ settingsPairs st)
         forHeadersFrame _ h =
           forStream h $ \s ->
           do let flags = headersFlags h
@@ -706,6 +730,9 @@ defaultEndpointInputFrameHandlers conn =
           -- TODO: make termination status a parameter, close stream
             queueFrame conn ASAP (rstStreamFrame conn (streamOf frame) InvalidStream)
         logErr = logMessage conn
+
+extractSetting :: SettingID -> [(SettingIDAndFlags, SettingValue)] -> Maybe SettingValue
+extractSetting sid pairs = lookup sid (map (first settingID) pairs)
 
 -- | Sends an error message to the logger for a connection.
 logMessage :: Connection -> String -> IO ()
