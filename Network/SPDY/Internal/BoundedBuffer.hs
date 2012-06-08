@@ -23,7 +23,7 @@ import qualified Control.Concurrent.MSem as MSem
 import Control.Concurrent.MSemN (MSemN)
 import qualified Control.Concurrent.MSemN as MSemN
 import Control.Exception (mask_)
-import Control.Monad (liftM4, when, void)
+import Control.Monad (liftM4, when, unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Foldable
@@ -59,10 +59,17 @@ new capacity =
 -- buffer. Blocks if there is insufficient remaining capacity, until
 -- another thread removes enough chunks to free the required space.
 add :: Sized a => BoundedBuffer a -> a -> IO ()
-add bb chunk = void $ addGeneral bb chunk True
+add bb chunk =
+  addGeneral bb chunk True >>= \queued ->
+  unless queued
+  (error ("Can't insert chunk of size " ++ show (size chunk) ++
+          " in a buffer with total capacity " ++
+          show (totalCapacity bb)))
 
 -- | Attempts to add a chunk to the buffer, and indicates whether it
--- was successful. May block momentarily, but not indefinitely.
+-- was successful. May block momentarily, but not
+-- indefinitely. Returns 'False' for chunks that exceed the total
+-- capacity of the buffer.
 tryAdd :: Sized a => BoundedBuffer a -> a -> IO Bool
 tryAdd bb chunk = addGeneral bb chunk False
 
@@ -71,7 +78,6 @@ tryAdd bb chunk = addGeneral bb chunk False
 -- otherwise.
 addGeneral :: Sized a => BoundedBuffer a -> a -> Bool -> IO Bool
 addGeneral bb chunk waitForSpace = do
-  ensurePossibleChunk bb chunk
   -- Using mask_ here should be sufficient to prevent an asynchronous
   -- exception from corrupting the state of the buffer, for three
   -- reasons. First, according to the SafeSemaphore docs MSemN.waitF
@@ -91,15 +97,9 @@ addGeneral bb chunk waitForSpace = do
     return sufficient
     where demand avail = let sufficientNow = avail >= n
                              n = size chunk
-                             sufficient = sufficientNow || waitForSpace
+                             sufficient = sufficientNow ||
+                                          waitForSpace && not (n > totalCapacity bb)
                          in (if sufficient then n else 0, sufficient)
-
-ensurePossibleChunk bb chunk =
-  when (n > totalCapacity bb)
-    (error ("Can't insert chunk of size " ++ show n ++
-            " in a buffer with total capacity " ++
-            show (totalCapacity bb)))
-  where n = size chunk
 
 -- | Removes the next available chunk from the buffer, blocking if the
 -- buffer is empty.
