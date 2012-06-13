@@ -53,7 +53,9 @@ module Network.SPDY.Stream (
   -- * Operations of interest to endpoints
   addIncomingData,
   addIncomingHeaders,
-  updateOutgoingWindowSize
+  updateOutgoingWindowSize,
+  -- * State snapshots
+  snapshot
   ) where
 
 import Control.Concurrent.MSemN (MSemN)
@@ -228,3 +230,14 @@ addIncomingHeaders :: Stream
                       -- ^ Whether this is the last content expected on the stream.
                       -> IO ()
 addIncomingHeaders s headers last = BB.add (ssIncomingBuffer s) (moreHeaders headers last)
+
+
+-- | Obtains a snapshot of a stream's state. A snapshot is a triple
+-- containing the remote data window size, the remaining buffer size,
+-- and the contents of the buffer. This is intended to support unit
+-- testing and debugging.
+snapshot :: Stream -> IO (Int, Int, [StreamContent])
+snapshot s = do
+  rdw <- MSemN.peekAvail $ ssOutgoingWindowSize s
+  (ldw, contents) <- BB.snapshot $ ssIncomingBuffer s
+  return (rdw, ldw, contents)

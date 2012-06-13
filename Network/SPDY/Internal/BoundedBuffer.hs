@@ -16,8 +16,10 @@ module Network.SPDY.Internal.BoundedBuffer (Sized(..),
                                             tryAdd,
                                             remove,
                                             totalCapacity,
-                                            remainingCapacity) where
+                                            remainingCapacity,
+                                            snapshot) where
 
+import Control.Applicative ((<$>))
 import Control.Concurrent.MSem (MSem)
 import qualified Control.Concurrent.MSem as MSem
 import Control.Concurrent.MSemN (MSemN)
@@ -127,6 +129,14 @@ totalCapacity = bbOriginalCapacity
 -- | The current remaining capacity of the buffer. This is a snapshot
 -- and may be invalid immediately afterward.
 remainingCapacity :: Sized a => BoundedBuffer a -> IO Int
-remainingCapacity bb = do
+remainingCapacity = (fst <$>) . snapshot
+
+-- | A snapshot of the current state of the buffer, including the free
+-- capacity and the current buffer contents. If concurrent threads are
+-- interacting with the buffer, this may become invalid
+-- immediately. This function is intended primarily for testing and
+-- debugging.
+snapshot :: Sized a => BoundedBuffer a -> IO (Int, [a])
+snapshot bb = do
   chunks <- readIORef (bbChunks bb)
-  return $! bbOriginalCapacity bb - F.sum (fmap size chunks)
+  return (bbOriginalCapacity bb - F.sum (fmap size chunks), toList chunks)
