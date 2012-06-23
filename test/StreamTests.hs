@@ -100,19 +100,24 @@ data TestStream =
              , tsPush :: StreamContent -> IO ()
              , tsPull :: IO StreamContent
              , tsRemoteBufSize :: Int
-             , tsPushed :: IORef [StreamContent] }
+             , tsPushed :: IORef [StreamContent]
+             , tsSentWUs :: IORef [DeltaWindowSize] }
 
 newTestStream :: StreamID -> Int -> Int -> IO TestStream
 newTestStream sid remoteBufSize localBufSize = do
   pushed <- newIORef []
-  let opts = NewStreamOpts remoteBufSize localBufSize False recordOutgoing doNothing doNothing
-      recordOutgoing c = atomicModifyIORef pushed (\cs -> (cs ++ [c], ()))
+  sentWUs <- newIORef []
+  let opts = NewStreamOpts remoteBufSize localBufSize False recordOutgoing recordWindowUpdate doNothing
+      recordOutgoing = doAppend pushed
+      recordWindowUpdate = doAppend sentWUs
+      doAppend xsRef x = atomicModifyIORef xsRef (\xs -> (xs ++ [x], ()))
   (s, Just push, pull) <- newStream sid opts
   return TestStream { tsStream = s
                     , tsPush = push
                     , tsPull = pull
                     , tsRemoteBufSize = remoteBufSize
-                    , tsPushed = pushed }
+                    , tsPushed = pushed
+                    , tsSentWUs = sentWUs}
 
 push :: TestStream -> StreamContent -> IO ()
 push ts  = tsPush ts
@@ -137,9 +142,11 @@ abstract :: TestStream -> IO StreamModel
 abstract ts = do
   (remoteWindowSize, localWindowSize, buffered) <- snapshot $ tsStream ts
   pushed <- readIORef $ tsPushed ts
+  sentWUs <- readIORef $ tsSentWUs ts
   return StreamModel { smRemoteBufSize = tsRemoteBufSize ts
                      , smRemoteDWS = remoteWindowSize
                      , smPushed = pushed
+                     , smSentWUs = sentWUs
                      , smLocalDWS = localWindowSize
                      , smBuffered = buffered }
 
@@ -151,6 +158,8 @@ data StreamModel =
                 -- ^ Remote data window size
               , smPushed :: [StreamContent]
                 -- ^ Content sent on the stream
+              , smSentWUs :: [DeltaWindowSize]
+                -- ^ Window updates sent to the remote end
               , smLocalDWS :: Int
                 -- ^ Local data window size
               , smBuffered :: [StreamContent]
@@ -177,7 +186,8 @@ specPull sm =
   (sc, forContent forHeaders forData sc)
   where sc = head $ smBuffered sm
         forHeaders _ _ = sm'
-        forData c _ = sm' { smLocalDWS = smLocalDWS sm' + size c }
+        forData c _ = sm' { smLocalDWS = smLocalDWS sm' + size c
+                          , smSentWUs = smSentWUs sm ++ [ fromIntegral $ size c ] }
         sm' = sm { smBuffered = tail $ smBuffered sm }
 
 specUpdateOutgoingWindowSize :: DeltaWindowSize -> StreamModel -> StreamModel
