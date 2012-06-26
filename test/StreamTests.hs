@@ -282,7 +282,7 @@ forAllReachable aPropM = do
   lws <- pick windowSize
   ts  <- run $ newTestStream sid rws lws
   model <- run $ abstract ts
-  as <- pick (sized $ \n -> actions model (min n 10))
+  as <- pick (sized $ actions model)
   failOnException $ performAll ts as
   aPropM ts
 
