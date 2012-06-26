@@ -314,7 +314,6 @@ implements' legalOperand tsOp modelOp =
 
 failOnException :: IO a -> PropertyM IO a
 failOnException op =
-  -- idea: use 'try' to get either a result or an exception, and if we get the exception, turn it into a failure
   either stopExn return =<< (run $ try op)
   where stopExn e = stop $ failed { reason = "Exception: " ++ show (e :: SomeException) }
 
