@@ -11,7 +11,7 @@
 
 module StreamTests (test) where
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<*>))
 import Control.Exception (SomeException, try)
 import Control.Monad (void, unless)
 import Data.ByteString (ByteString)
@@ -42,10 +42,12 @@ test = testGroup "Stream tests" [
   monadicIO $ propM_updateOutgoingWindowSize,
   testProperty "Pushing content follows spec" $
   monadicIO $ propM_push,
-  testProperty "Buffering incoming content follows spec" $
+  testProperty "Buffering incoming content follows spec if there's room" $
   monadicIO $ propM_addIncoming,
   testProperty "Pulling buffered content follows spec" $
-  monadicIO $ propM_pull
+  monadicIO $ propM_pull,
+  testProperty "Refuse to buffer oversized incoming data" $
+  monadicIO $ propM_refuseAddIncoming
   ]
 
 propM_pusherIffLocalHalfOpen :: PropertyM IO ()
@@ -73,7 +75,7 @@ propM_push =
 
 propM_addIncoming :: PropertyM IO ()
 propM_addIncoming =
-  implements' (fromTestStream genIncomingContent) (flip addIncoming) specAddIncoming
+  implements (fromTestStream genIncomingContent) (flip addIncoming) specAddIncoming
 
 propM_pull :: PropertyM IO ()
 propM_pull =
@@ -81,6 +83,10 @@ propM_pull =
   (run . (not . null . smBuffered <$>) . abstract)
   (const $ return ())
   (const pull) (const specPull)
+
+propM_refuseAddIncoming :: PropertyM IO ()
+propM_refuseAddIncoming =
+  implements (fromTestStream genOversizedIncomingContent) (flip addIncoming) specAddIncoming
 
 -- We approach testing a stream in one of the ways described by
 -- Klassen and Hughes: assert that the stream implements a pure model,
@@ -122,15 +128,10 @@ newTestStream sid remoteBufSize localBufSize = do
 push :: TestStream -> StreamContent -> IO ()
 push ts  = tsPush ts
 
-addIncoming :: TestStream -> StreamContent -> IO ()
+addIncoming :: TestStream -> StreamContent -> IO Bool
 addIncoming ts = forContent forHeaders forData
-  where forHeaders = addIncomingHeaders $ tsStream ts
-        forData bs last = do
-          added <- addIncomingData (tsStream ts) bs last
-          unless added $ do
-            sm <- abstract ts
-            error ("failed to add " ++ show (size bs) ++ " bytes; " ++
-                   "have " ++ show (smLocalDWS sm) ++ " bytes free in buffer")
+  where forHeaders hs last = addIncomingHeaders (tsStream ts) hs last >> return True
+        forData bs last = addIncomingData (tsStream ts) bs last
 
 pull :: TestStream -> IO StreamContent
 pull ts = tsPull ts
@@ -174,11 +175,13 @@ specPush sc sm =
         forData c _ = sm' { smRemoteDWS = smRemoteDWS sm' - size c }
         sm' = sm { smPushed = smPushed sm ++ [sc] }
 
-specAddIncoming :: StreamContent -> StreamModel -> StreamModel
+specAddIncoming :: StreamContent -> StreamModel -> (Bool, StreamModel)
 specAddIncoming sc sm =
   forContent forHeaders forData sc
-  where forHeaders _ _ = sm'
-        forData c _ = sm' { smLocalDWS = smLocalDWS sm' - size c }
+  where forHeaders _ _ = (True, sm')
+        forData c _ = if size c <= smLocalDWS sm'
+                      then (True, sm' { smLocalDWS = smLocalDWS sm' - size c })
+                      else (False, sm)
         sm' = sm { smBuffered = smBuffered sm ++ [sc] }
 
 specPull :: StreamModel -> (StreamContent, StreamModel)
@@ -206,14 +209,28 @@ performAll s = mapM_ (performOne s)
 
 performOne :: TestStream -> Action -> IO ()
 performOne ts (Push sc) = push ts sc
-performOne ts (AddIncoming sc) = addIncoming ts sc
+performOne ts (AddIncoming sc) = do
+  added <- addIncoming ts sc
+  unless added $ do
+    sm <- abstract ts
+    error $
+      "Failed to add content of size " ++ show (size sc) ++
+      " to test stream when there are " ++ show (smLocalDWS sm) ++
+      " bytes free in the buffer"
 performOne ts Pull = void (pull ts)
 performOne ts (UpdateOutgoingWindowSize wu) = updateOutgoingWindowSize ts wu
 
 specPerform :: StreamModel -> Action -> StreamModel
 specPerform sm a = case a of
   Push sc -> specPush sc sm
-  AddIncoming sc -> specAddIncoming sc sm
+  AddIncoming sc ->
+    let (added, sm') = specAddIncoming sc sm
+    in if added
+       then sm'
+       else error $
+            "Failed to add content of size " ++ show (size sc) ++
+            " to stream model when there are " ++ show (smLocalDWS sm) ++
+            " bytes free in the buffer."
   Pull -> snd $ specPull sm
   UpdateOutgoingWindowSize wu -> specUpdateOutgoingWindowSize wu sm
 
@@ -238,6 +255,11 @@ genIncomingContent :: StreamModel -> Gen StreamContent
 genIncomingContent sm =
   oneof $ catMaybes [ Just genHeaders,
                       maybeGenData $ smLocalDWS sm ]
+
+genOversizedIncomingContent :: StreamModel -> Gen StreamContent
+genOversizedIncomingContent sm =
+  moreData <$> bytesBetween (localDWS + 1) (localDWS + 10) <*> arbitrary
+    where localDWS = smLocalDWS sm
 
 genHeaders :: Gen StreamContent
 genHeaders = flip moreHeaders False <$> arbitrary
