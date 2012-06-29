@@ -17,11 +17,12 @@ import Control.Monad (void, unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
+import Data.List (foldl')
 import Data.Maybe (isNothing, catMaybes)
 import Prelude hiding (catch)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
-import Test.QuickCheck (Gen, arbitrary, choose, oneof, sized, vectorOf)
+import Test.QuickCheck (Gen, arbitrary, choose, oneof, sized, vectorOf, forAll, Property)
 import Test.QuickCheck.Monadic (PropertyM, run, pick, monadicIO, assert, forAllM, pre, stop)
 import Test.QuickCheck.Property (failed, reason)
 
@@ -33,22 +34,51 @@ import qualified Network.SPDY.Stream as S
 import Instances ()
 
 test :: Test
-test = testGroup "Stream tests" [
-  testProperty "Pusher if and only if local half-open" $
-  monadicIO $ propM_pusherIffLocalHalfOpen,
-  testProperty "Reject incoming data chunks that are bigger than the remaining free space" $
-  monadicIO $ propM_rejectIncomingDataBiggerThanFreeSpace,
-  testProperty "Updating outgoing window size follows spec" $
-  monadicIO $ propM_updateOutgoingWindowSize,
-  testProperty "Pushing content follows spec" $
-  monadicIO $ propM_push,
-  testProperty "Buffering incoming content follows spec if there's room" $
-  monadicIO $ propM_addIncoming,
-  testProperty "Pulling buffered content follows spec" $
-  monadicIO $ propM_pull,
-  testProperty "Refuse to buffer oversized incoming data" $
-  monadicIO $ propM_refuseAddIncoming
+test = testGroup "All stream model and stream tests" [
+  testGroup "Stream model tests" [
+     testProperty "Model adds content when there is room, updates local window size"
+     prop_specAddIncoming,
+     testProperty "Model refuses to add oversized content"
+     prop_specRefuseAddIncoming
+     ],
+  testGroup "Stream tests" [
+     testProperty "Pusher if and only if local half-open" $
+     monadicIO $ propM_pusherIffLocalHalfOpen,
+     testProperty "Reject incoming data chunks that are bigger than the remaining free space" $
+     monadicIO $ propM_rejectIncomingDataBiggerThanFreeSpace,
+     testProperty "Updating outgoing window size follows spec" $
+     monadicIO $ propM_updateOutgoingWindowSize,
+     testProperty "Pushing content follows spec" $
+     monadicIO $ propM_push,
+     testProperty "Buffering incoming content follows spec if there's room" $
+     monadicIO $ propM_addIncoming,
+     testProperty "Pulling buffered content follows spec" $
+     monadicIO $ propM_pull
+     ]
   ]
+
+-- model tests, ordinary QuickCheck tests that confirm that the model
+-- has the properties we desire
+
+prop_specAddIncoming :: Property
+prop_specAddIncoming =
+  forAll genReachableModel $ \sm ->
+  forAll (genIncomingContent sm) $ \c ->
+  let (added, sm') = specAddIncoming c sm
+  in added &&
+     smBuffered sm' == smBuffered sm ++ [c] &&
+     smLocalDWS sm' == smLocalDWS sm - size c
+
+prop_specRefuseAddIncoming :: Property
+prop_specRefuseAddIncoming =
+  forAll genReachableModel $ \sm ->
+  forAll (genOversizedIncomingContent sm) $ \c ->
+  let (added, sm') = specAddIncoming c sm
+  in not added && sm' == sm
+
+
+-- Tests of the real stream implementation. Most of these are tests
+-- for correspondence between the model and the real implementation.
 
 propM_pusherIffLocalHalfOpen :: PropertyM IO ()
 propM_pusherIffLocalHalfOpen = forAllM arbitrary $ \halfClosed -> do
@@ -75,7 +105,10 @@ propM_push =
 
 propM_addIncoming :: PropertyM IO ()
 propM_addIncoming =
-  implements (fromTestStream genIncomingContent) (flip addIncoming) specAddIncoming
+  implements (fromTestStream $ \sm ->
+               oneof [genIncomingContent sm
+                     ,genOversizedIncomingContent sm])
+  (flip addIncoming) specAddIncoming
 
 propM_pull :: PropertyM IO ()
 propM_pull =
@@ -83,10 +116,6 @@ propM_pull =
   (run . (not . null . smBuffered <$>) . abstract)
   (const $ return ())
   (const pull) (const specPull)
-
-propM_refuseAddIncoming :: PropertyM IO ()
-propM_refuseAddIncoming =
-  implements (fromTestStream genOversizedIncomingContent) (flip addIncoming) specAddIncoming
 
 -- We approach testing a stream in one of the ways described by
 -- Klassen and Hughes: assert that the stream implements a pure model,
@@ -274,6 +303,18 @@ maybeGenData max =
 
 genDeltaWindowSize :: StreamModel -> Gen DeltaWindowSize
 genDeltaWindowSize sm = fromIntegral <$> choose (0, smRemoteBufSize sm - smRemoteDWS sm)
+
+genReachableModel :: Gen StreamModel
+genReachableModel = do
+  rws <- windowSize
+  lws <- windowSize
+  let sm = StreamModel { smRemoteBufSize = rws
+                       , smRemoteDWS = rws
+                       , smPushed = []
+                       , smSentWUs = []
+                       , smLocalDWS = lws
+                       , smBuffered = [] }
+  foldl' specPerform sm <$> sized (actions sm)
 
 -- | Generates a sequence of non-blocking actions.
 actions :: StreamModel
