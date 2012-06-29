@@ -133,6 +133,11 @@ addIncoming ts = forContent forHeaders forData
   where forHeaders hs last = addIncomingHeaders (tsStream ts) hs last >> return True
         forData bs last = addIncomingData (tsStream ts) bs last
 
+addIncomingOrDie :: TestStream -> StreamContent -> IO ()
+addIncomingOrDie ts sc = do
+  added <- addIncoming ts sc
+  unless added $ failedToAdd "test stream" sc =<< abstract ts
+
 pull :: TestStream -> IO StreamContent
 pull ts = tsPull ts
 
@@ -184,6 +189,11 @@ specAddIncoming sc sm =
                       else (False, sm)
         sm' = sm { smBuffered = smBuffered sm ++ [sc] }
 
+specAddIncomingOrDie :: StreamContent -> StreamModel -> StreamModel
+specAddIncomingOrDie sc sm =
+  let (added, sm') = specAddIncoming sc sm
+  in if added then sm' else failedToAdd "stream model" sc sm
+
 specPull :: StreamModel -> (StreamContent, StreamModel)
 specPull sm =
   (sc, forContent forHeaders forData sc)
@@ -197,6 +207,14 @@ specUpdateOutgoingWindowSize :: DeltaWindowSize -> StreamModel -> StreamModel
 specUpdateOutgoingWindowSize wu sm =
   sm { smRemoteDWS = smRemoteDWS sm + fromIntegral wu }
 
+failedToAdd :: String -> StreamContent -> StreamModel -> a
+failedToAdd toWhat sc sm =
+  error $
+  "Failed to add incoming content of size " ++ show (size sc) ++
+  " to " ++ toWhat ++
+  " when there are " ++ show (smLocalDWS sm) ++
+  " bytes free in the buffer."
+
 data Action =
   Push StreamContent |
   AddIncoming StreamContent |
@@ -209,28 +227,14 @@ performAll s = mapM_ (performOne s)
 
 performOne :: TestStream -> Action -> IO ()
 performOne ts (Push sc) = push ts sc
-performOne ts (AddIncoming sc) = do
-  added <- addIncoming ts sc
-  unless added $ do
-    sm <- abstract ts
-    error $
-      "Failed to add content of size " ++ show (size sc) ++
-      " to test stream when there are " ++ show (smLocalDWS sm) ++
-      " bytes free in the buffer"
+performOne ts (AddIncoming sc) = addIncomingOrDie ts sc
 performOne ts Pull = void (pull ts)
 performOne ts (UpdateOutgoingWindowSize wu) = updateOutgoingWindowSize ts wu
 
 specPerform :: StreamModel -> Action -> StreamModel
 specPerform sm a = case a of
   Push sc -> specPush sc sm
-  AddIncoming sc ->
-    let (added, sm') = specAddIncoming sc sm
-    in if added
-       then sm'
-       else error $
-            "Failed to add content of size " ++ show (size sc) ++
-            " to stream model when there are " ++ show (smLocalDWS sm) ++
-            " bytes free in the buffer."
+  AddIncoming sc -> specAddIncomingOrDie sc sm
   Pull -> snd $ specPull sm
   UpdateOutgoingWindowSize wu -> specUpdateOutgoingWindowSize wu sm
 
