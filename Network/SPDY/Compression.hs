@@ -8,11 +8,11 @@ module Network.SPDY.Compression (compressionDictionary,
 
 import Blaze.ByteString.Builder
 import Codec.Zlib (WindowBits(..),
-                   Inflate, withInflateInput, flushInflate,
-                   Deflate, withDeflateInput, flushDeflate)
+                   Inflate, feedInflate, flushInflate,
+                   Deflate, feedDeflate, flushDeflate,
+                   Popper)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.IORef (newIORef, modifyIORef, readIORef)
 import Data.Monoid
 
 -- | The compression dictionary to use for the zlib compression of headers.
@@ -203,26 +203,18 @@ defaultSPDYWindowBits :: WindowBits
 defaultSPDYWindowBits = WindowBits 11
 
 compress :: Deflate -> ByteString -> IO Builder
-compress deflate bs =
-  transform deflate withDeflateInput flushDeflate bs
+compress deflate bs = do
+  p <- feedDeflate deflate bs
+  b <- drain p mempty
+  drain (flushDeflate deflate) b
 
 decompress :: Inflate -> ByteString -> IO Builder
-decompress inflate bs =
-  transform inflate withInflateInput flushInflate' bs
-  where flushInflate' c popper =
-          popper $ fmap Just $ flushInflate c
+decompress inflate bs = do
+  p <- feedInflate inflate bs
+  b <- drain p mempty
+  lastBs <- flushInflate inflate
+  return $ b `mappend` (fromByteString lastBs)
 
-type Popper a = IO (Maybe ByteString) -> IO a
-
-transform :: context
-             -> (context -> ByteString -> Popper () -> IO ())
-             -> (context -> Popper () -> IO ())
-             -> ByteString
-             -> IO Builder
-transform context feed finish bs = do
-  bref <- newIORef mempty
-  let popper = (maybe (return ()) addBS =<<)
-      addBS dbs = modifyIORef bref (`mappend` fromByteString dbs)
-  feed context bs popper
-  finish context popper
-  readIORef bref
+drain :: Popper -> Builder -> IO Builder
+drain popper b =
+  popper >>= maybe (return b) (drain popper . (b `mappend`) . fromByteString)
