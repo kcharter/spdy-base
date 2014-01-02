@@ -9,7 +9,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
 import System.IO (Handle, hFlush, hClose)
 
-import Network.TLS (TLSCtx)
 import qualified Network.TLS as TLS
 
 
@@ -42,10 +41,10 @@ fromHandle h =
 
 -- | A data connection based on a TLS context on a handle. This is
 -- intended for TLS-enabled connections over sockets.
-fromTLSCtx :: TLSCtx Handle -> NetworkConnection
+fromTLSCtx :: TLS.Context -> NetworkConnection
 fromTLSCtx tlsCtx =
   NetworkConnection
   { sendData = TLS.sendData tlsCtx . LB.fromChunks . (:[])
   , receiveData = TLS.recvData tlsCtx
-  , flush = hFlush (TLS.ctxConnection tlsCtx)
-  , close = TLS.bye tlsCtx >> hClose (TLS.ctxConnection tlsCtx) }
+  , flush = TLS.contextFlush tlsCtx
+  , close = TLS.bye tlsCtx >> TLS.contextClose tlsCtx }

@@ -19,6 +19,7 @@ module Network.SPDY.Client (ClientOptions(..),
                             Milliseconds
                             ) where
 
+import Control.Monad (liftM)
 import qualified Data.ByteString.Char8 as C8
 import Network (connectTo)
 import System.IO (hPutStrLn, stderr)
@@ -135,16 +136,17 @@ toNetworkConnection cs cKey =
   case cs of
     CsTLS ->
       do let protocol = C8.pack "spdy/3"
-             tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
-                                           , TLS.onNPNServerSuggest =
-                                             Just $ \protos -> do
-                                               -- TODO: log instead of assuming stderr
-                                               hPutStrLn stderr "protocols offered by server:"
-                                               mapM_ (hPutStrLn stderr . C8.unpack) protos
-                                               return protocol }
-         rng <- CR.newGenIO :: IO CR.SystemRandom
+             tlsParams =
+               TLS.defaultParamsClient { TLS.pCiphers = TLSX.ciphersuite_all
+                                       , TLS.onNPNServerSuggest =
+                                         Just $ \protos -> do
+                                           -- TODO: log instead of assuming stderr
+                                           hPutStrLn stderr "protocols offered by server:"
+                                           mapM_ (hPutStrLn stderr . C8.unpack) protos
+                                           return protocol }
+         rng <- (liftM CR.cprgCreate CR.createEntropyPool :: IO CR.SystemRNG)
          h <- uncurry connectTo (toConnectParams cKey)
-         tlsCtx <- TLS.client tlsParams rng h
+         tlsCtx <- TLS.contextNewOnHandle h tlsParams rng
          TLS.handshake tlsCtx
          maybeProtocol <- TLS.getNegotiatedProtocol tlsCtx
          -- TODO: brackOnError to close the handle

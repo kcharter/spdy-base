@@ -26,7 +26,7 @@ module Network.SPDY.Server
        ) where
 
 import Control.Concurrent (forkIO)
-import Control.Monad (when)
+import Control.Monad (liftM, when)
 import qualified Data.ByteString.Char8 as C8
 import Network.Socket (PortNumber)
 import qualified Network.Socket as Sock
@@ -140,18 +140,19 @@ runTLSServer pn cert key theServer = do
   s <- Sock.socket Sock.AF_INET Sock.Stream Sock.defaultProtocol
   Sock.bindSocket s (Sock.SockAddrInet pn hn)
   Sock.listen s 2
-  rng <- (CR.newGenIO :: IO CR.SystemRandom)
-  let tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
-                                    , TLS.pCertificates = [(cert, Just key)]
-                                    , TLS.onSuggestNextProtocols =
-                                      return (Just ["spdy/3"]) }
+  rng <- (liftM CR.cprgCreate CR.createEntropyPool :: IO CR.SystemRNG)
+  let tlsParams =
+        TLS.defaultParamsServer { TLS.pCiphers = TLSX.ciphersuite_all
+                                , TLS.pCertificates = [(cert, Just key)]
+                                , TLS.onSuggestNextProtocols =
+                                  return (Just ["spdy/3"]) }
   loop tlsParams rng s
   where loop tlsParams rng s = do
           (s', sa) <- Sock.accept s
           -- TODO: proper logging
           hPutStrLn stderr $ "accepted connection from " ++ show sa
           forkIO (Sock.socketToHandle s' ReadWriteMode >>= \h -> do
-                     tlsCtx <- TLS.server tlsParams rng h
+                     tlsCtx <- TLS.contextNewOnHandle h tlsParams rng
                      TLS.handshake tlsCtx
                      maybeProtocol <- TLS.getNegotiatedProtocol tlsCtx
                      maybe (TLS.bye tlsCtx) (acceptSPDY sa tlsCtx) maybeProtocol)
