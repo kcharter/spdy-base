@@ -14,14 +14,14 @@ module Network.SPDY.Internal.PriorityChan (PriorityChan,
                                            send,
                                            receive) where
 
-import Control.Concurrent.QSem (QSem, newQSem, signalQSem, waitQSem)
+import qualified Control.Concurrent.MSem as MSem
 import Control.Exception (mask_)
 import Data.IORef (IORef, newIORef, atomicModifyIORef)
 
 import qualified Data.PriorityQueue.FingerTree as FT
 
 data PriorityChan p a = PriorityChan {
-  pcSem :: QSem,
+  pcSem :: MSem.MSem Int,
   -- ^ A semaphore that has credits as long as the queue is non-empty.
   pcIORef :: IORef (FT.PQueue p a)
   -- ^ The underlying priority queue.
@@ -30,7 +30,7 @@ data PriorityChan p a = PriorityChan {
 -- | Creates a new, empty priority channel.
 newChan :: Ord p => IO (PriorityChan p a)
 newChan = do
-  sem <- newQSem 0
+  sem <- MSem.new 0
   ref <- newIORef (FT.empty)
   return PriorityChan { pcSem = sem, pcIORef = ref }
 
@@ -43,13 +43,13 @@ send p x pq =
   -- thread
   mask_ $ do atomicModifyIORef (pcIORef pq) $ \ftpq ->
                let ftpq' = FT.add p x ftpq in ftpq' `seq` (ftpq', ())
-             signalQSem (pcSem pq)
+             MSem.signal (pcSem pq)
 
 -- | Receives the minimum-priority element from the channel, blocking
 -- until one is available.
 receive :: Ord p => PriorityChan p a -> IO a
 receive pq =
-  mask_ (do waitQSem (pcSem pq)
+  mask_ (do MSem.wait (pcSem pq)
             atomicModifyIORef (pcIORef pq) $ \ftpq ->
               maybe (ftpq, Nothing) (\(x, ftpq') -> (ftpq', Just x)) (FT.minView ftpq))
   >>= maybe (error "Didn't block when receiving on an empty priority channel.") return
