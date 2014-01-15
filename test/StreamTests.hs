@@ -19,7 +19,6 @@ import qualified Data.ByteString as B
 import Data.IORef (IORef, newIORef, atomicModifyIORef, readIORef)
 import Data.List (foldl')
 import Data.Maybe (isNothing, catMaybes)
-import Prelude hiding (catch)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck (Gen, arbitrary, choose, oneof, sized, vectorOf, forAll, Property)

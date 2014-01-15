@@ -4,10 +4,10 @@ module BoundedBufferTests where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO)
-import Control.Exception (assert, catch, ErrorCall(..))
+import Control.Exception (assert, ErrorCall(..))
+import qualified Control.Exception as CE
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
-import Prelude hiding (catch)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
@@ -65,7 +65,7 @@ propIO_oversizedError :: (Content, Int) -> IO Bool
 propIO_oversizedError (content, capacity) =
   assert (size content > capacity) $ do
     bb <- BB.new capacity
-    (BB.add bb content >> return False) `catch` handleErrorCall
+    (BB.add bb content >> return False) `CE.catch` handleErrorCall
     where handleErrorCall (ErrorCall _) = return True
 
 prop_tryAddIsANonblockingAdd = morallyDubiousIOProperty . propIO_tryAddIsANonblockingAdd
