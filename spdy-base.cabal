@@ -23,6 +23,7 @@ Cabal-version:       >= 1.8
 
 
 Library
+  hs-source-dirs:      src
   Exposed-modules:     Network.SPDY,
                        Network.SPDY.Compression,
                        Network.SPDY.Error,
