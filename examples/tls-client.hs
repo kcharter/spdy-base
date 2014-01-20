@@ -1,7 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TlsClient where
+module Main where
 
+import Control.Monad (liftM)
 import qualified Data.ByteString.Char8 as C8
 import Network
 import System.IO
@@ -22,12 +23,13 @@ main = runCommand $ \opts _ -> do
   let hostName = optServer opts
       port = fromIntegral $ optPort opts
       proto = C8.pack $ optProtocol opts
-      tlsParams = TLS.defaultParams { TLS.pCiphers = TLSX.ciphersuite_all
-                                    , TLS.onNPNServerSuggest = Just $ const (return proto) }
-  rng <- CR.newGenIO :: IO CR.SystemRandom
+      tlsParams =
+        TLS.defaultParamsClient { TLS.pCiphers = TLSX.ciphersuite_all
+                                , TLS.onNPNServerSuggest = Just $ const (return proto) }
+  rng <- (liftM CR.cprgCreate CR.createEntropyPool :: IO CR.SystemRNG)
   h <- connectTo hostName (PortNumber port)
   log "connected"
-  tlsCtx <- TLS.client tlsParams rng h
+  tlsCtx <- TLS.contextNewOnHandle h tlsParams rng
   log "created TLS context"
   TLS.handshake tlsCtx
   log "made TLS handshake"

@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SPing where
+module Main where
 
 import Control.Monad (replicateM_)
 import System.IO (hSetBuffering, BufferMode(..), stdout, stderr)

@@ -1,24 +1,22 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SServe where
+module Main where
 
 import Control.Concurrent (forkIO, killThread)
-import Control.Exception (catch, finally, IOException)
+import qualified Control.Exception as CE
 import Control.Monad (unless)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (toLower, isSpace)
 import Network.Socket ()
-import Prelude hiding (catch)
-import System.FilePath
 import System.IO (withFile, hSetBinaryMode, IOMode(..), openBinaryFile, hClose, hIsEOF)
 import Options
 
-import Data.Certificate.PEM (parsePEMCert, parsePEMKeyRSA)
 import Data.Certificate.KeyRSA (decodePrivate)
 import Data.Certificate.X509 (X509, decodeCertificate)
+import Data.PEM (pemParseLBS, pemContent)
 import qualified Network.TLS as TLS
 
 import Network.SPDY.Server
@@ -58,22 +56,23 @@ main = runCommand $ \opts _ -> do
             _ ->
               quitLoop tid
 
+-- TODO: why is 'maybePuller' unused here?
 requestHandler :: FilePath -> RequestHandler
 requestHandler staticDir (HeaderBlock pairs) maybePuller =
   maybe badRequest forPath $ lookup (HeaderName ":path") pairs
   where badRequest = return (responseHeaders 400, Nothing)
         forPath (HeaderValue pathBytes) =
-          catch (do h <- openBinaryFile (toFilePath pathBytes) ReadMode
-                    return (responseHeaders 200, Just $ sendFile h))
+          CE.catch (do h <- openBinaryFile (toFilePath pathBytes) ReadMode
+                       return (responseHeaders 200, Just $ sendFile h))
           notFound
         toFilePath pathBytes = relativeTo staticDir (C8.unpack pathBytes)
         relativeTo staticDir path = staticDir ++ "/" ++ path
-        sendFile h pushContent = finally loop (hClose h)
+        sendFile h pushContent = CE.finally loop (hClose h)
           where loop = do chunk <- B.hGetSome h 1200
                           isLast <- hIsEOF h
                           pushContent $ moreData chunk isLast
                           unless isLast loop
-        notFound :: IOException -> IO (HeaderBlock, Maybe a)
+        notFound :: CE.IOException -> IO (HeaderBlock, Maybe a)
         notFound _ = return (responseHeaders 404, Nothing)
         responseHeaders statusCode = HeaderBlock [httpStatus statusCode, http1_1Version]
 
@@ -82,18 +81,18 @@ getCertificate :: String -> IO X509
 getCertificate certFileName =
   withFile certFileName ReadMode $ \h ->
     hSetBinaryMode h True >>
-    B.hGetContents h >>=
-    either error return .
+    LB.hGetContents h >>=
+    either (error . ("decodeCertificate: " ++)) return .
     decodeCertificate .
-    maybe (error "Can't parse PEM certificate") (LB.fromChunks . (:[])) .
-    parsePEMCert
+    either (error . ("pemParseLBS: " ++)) (LB.fromChunks . map pemContent) .
+    pemParseLBS
 
 getKey :: String -> IO TLS.PrivateKey
 getKey keyFileName =
   fmap TLS.PrivRSA $ withFile keyFileName ReadMode $ \h ->
   hSetBinaryMode h True >>
-  B.hGetContents h >>=
-  either error (return . snd) .
+  LB.hGetContents h >>=
+  either (error . ("decodePrivate: " ++)) (return . snd) .
   decodePrivate .
-  maybe (error "Can't parse PEM key") (LB.fromChunks . (:[])) .
-  parsePEMKeyRSA
+  either (error . ("pemParseLBS: " ++)) (LB.fromChunks . map pemContent) .
+  pemParseLBS

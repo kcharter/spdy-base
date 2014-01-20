@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SGet where
+module Main where
 
 import qualified Data.ByteString as B
 import Data.String (fromString)

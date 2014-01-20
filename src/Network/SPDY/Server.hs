@@ -133,10 +133,19 @@ runTLSServer :: PortNumber
                 -- ^ The SPDY server.
                 -> IO ()
 runTLSServer pn cert key theServer = do
+  -- TODO: this can't be the right way to do this. How do we
+  -- normally select a good address?
   let hints = Sock.defaultHints { Sock.addrFlags = [ Sock.AI_ADDRCONFIG ] }
-  addrs <- Sock.getAddrInfo (Just hints) (Just "localhost") Nothing
+  let ip4SockAddresses =
+        filter isIP4SockAddress .
+        map Sock.addrAddress
+      isIP4SockAddress addr = case addr of
+        (Sock.SockAddrInet _ _) -> True
+        _ -> False
+  addrs <- liftM ip4SockAddresses $
+           Sock.getAddrInfo (Just hints) (Just "localhost") Nothing
   when (null addrs) (error "Cannot find a socket address to bind to.")
-  let (Sock.SockAddrInet _ hn) = Sock.addrAddress $ head addrs
+  let (Sock.SockAddrInet _ hn) = head addrs
   s <- Sock.socket Sock.AF_INET Sock.Stream Sock.defaultProtocol
   Sock.bindSocket s (Sock.SockAddrInet pn hn)
   Sock.listen s 2
