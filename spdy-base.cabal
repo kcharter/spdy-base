@@ -21,6 +21,9 @@ Build-type:          Simple
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >= 1.8
 
+Flag enable-examples
+     description: Whether to build the example programs.
+     default:     False
 
 Library
   hs-source-dirs:      src
@@ -82,6 +85,10 @@ Test-Suite tests
   GHC-Options:         -W
 
 executable sping
+  if flag(enable-examples)
+    buildable: True
+  else
+    buildable: False
   hs-source-dirs:
     examples
   main-is:
@@ -94,6 +101,10 @@ executable sping
     -W
 
 executable sget
+  if flag(enable-examples)
+    buildable: True
+  else
+    buildable: False
   hs-source-dirs:
     examples
   main-is:
@@ -107,6 +118,10 @@ executable sget
     -W
 
 executable sserve
+  if flag(enable-examples)
+    buildable: True
+  else
+    buildable: False
   hs-source-dirs:
     examples
   main-is:
@@ -126,6 +141,10 @@ executable sserve
     -W
 
 executable tls-client
+  if flag(enable-examples)
+    buildable: True
+  else
+    buildable: False
   hs-source-dirs:
     examples
   main-is:
@@ -143,6 +162,10 @@ executable tls-client
     -W
 
 executable tls-server
+  if flag(enable-examples)
+    buildable: True
+  else
+    buildable: False
   hs-source-dirs:
     examples
   main-is:
