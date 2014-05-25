@@ -1,6 +1,6 @@
 *~
 cabal-dev
-cabal-sandbox.config
+cabal[.-]sandbox.config
 .cabal-sandbox
 dist
 tmp
