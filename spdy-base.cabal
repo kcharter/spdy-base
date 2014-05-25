@@ -46,7 +46,7 @@ Library
                        Network.SPDY.Internal.PriorityChan,
                        Network.SPDY.Internal.Serialize,
                        Network.SPDY.Internal.ToWord8
-  Build-depends:       SafeSemaphore == 0.9.0,
+  Build-depends:       SafeSemaphore == 0.10.1,
                        attoparsec >= 0.10 && < 1,
                        base >= 4 && < 5,
                        blaze-builder >= 0.3 && < 1,
@@ -78,7 +78,7 @@ Test-Suite tests
                        base >= 4 && < 5,
                        blaze-builder >= 0.3 && < 1,
                        bytestring >= 0.10 && < 1,
-                       QuickCheck >= 2 && <= 3,
+                       QuickCheck >= 2.7 && <= 3,
                        test-framework >= 0.8.0.3,
                        test-framework-quickcheck2 >= 0.3.0.2,
                        zlib-bindings == 0.1.1.3

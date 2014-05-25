@@ -9,7 +9,6 @@ import Data.Ord (comparing)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
-import Test.QuickCheck.Property (morallyDubiousIOProperty)
 
 import Network.SPDY.Internal.PriorityChan (PriorityChan)
 import qualified Network.SPDY.Internal.PriorityChan as PC
@@ -20,9 +19,9 @@ test = testGroup "Priority channel tests" [
   testProperty "lowest priority first, in batches" prop_lowestPriorityFirstEachBatch
   ]
 
-prop_lowestPriorityFirst :: [(P,Int)] -> Gen Prop
+prop_lowestPriorityFirst :: [(P,Int)] -> Property
 prop_lowestPriorityFirst =
-  morallyDubiousIOProperty . ioprop_lowestPriorityFirst
+  ioProperty . ioprop_lowestPriorityFirst
 
 ioprop_lowestPriorityFirst :: [(P,Int)] -> IO Bool
 ioprop_lowestPriorityFirst inputs =
@@ -31,9 +30,9 @@ ioprop_lowestPriorityFirst inputs =
      outputs <- receiveBatch pc
      return (outputs == expectedOutputs inputs)
 
-prop_lowestPriorityFirstEachBatch :: [[(P,Int)]] -> Gen Prop
+prop_lowestPriorityFirstEachBatch :: [[(P,Int)]] -> Property
 prop_lowestPriorityFirstEachBatch =
-  morallyDubiousIOProperty . ioprop_lowestPriorityFirstEachBatch
+  ioProperty . ioprop_lowestPriorityFirstEachBatch
 
 ioprop_lowestPriorityFirstEachBatch :: [[(P,Int)]] -> IO Bool
 ioprop_lowestPriorityFirstEachBatch chunks =

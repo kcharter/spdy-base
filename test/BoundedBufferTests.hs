@@ -11,7 +11,6 @@ import qualified Data.ByteString.Char8 as C8
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
-import Test.QuickCheck.Property (morallyDubiousIOProperty)
 
 import Network.SPDY.Internal.BoundedBuffer (Sized(..))
 import qualified Network.SPDY.Internal.BoundedBuffer as BB
@@ -25,7 +24,7 @@ test = testGroup "Bounded buffer tests" [
   testProperty "tryAdd is a non-blocking add" $ forAll withSpaceForBiggest prop_tryAddIsANonblockingAdd
   ]
 
-prop_capacity = morallyDubiousIOProperty . propIO_capacity
+prop_capacity = ioProperty . propIO_capacity
 
 propIO_capacity :: (Content, Int) -> IO Bool
 propIO_capacity (content, capacity) =
@@ -35,7 +34,7 @@ propIO_capacity (content, capacity) =
     rc <- BB.remainingCapacity bb
     return (rc == capacity - size content)
 
-prop_fifo = morallyDubiousIOProperty . propIO_fifo
+prop_fifo = ioProperty . propIO_fifo
 
 propIO_fifo :: ([Content], Int) -> IO Bool
 propIO_fifo (contents, capacity) =
@@ -45,7 +44,7 @@ propIO_fifo (contents, capacity) =
     contents' <- mapM (const (BB.remove bb)) contents
     return (contents' == contents)
 
-prop_constTotalCapacity = morallyDubiousIOProperty . propIO_constTotalCapacity
+prop_constTotalCapacity = ioProperty . propIO_constTotalCapacity
 
 propIO_constTotalCapacity :: ([Content], Int) -> IO Bool
 propIO_constTotalCapacity (contents, capacity) =
@@ -59,7 +58,7 @@ propIO_constTotalCapacity (contents, capacity) =
       where add' bb c = BB.add bb c >> return (BB.totalCapacity bb)
             remove' bb = BB.remove bb >> return (BB.totalCapacity bb)
 
-prop_oversizedError = morallyDubiousIOProperty . propIO_oversizedError
+prop_oversizedError = ioProperty . propIO_oversizedError
 
 propIO_oversizedError :: (Content, Int) -> IO Bool
 propIO_oversizedError (content, capacity) =
@@ -68,7 +67,7 @@ propIO_oversizedError (content, capacity) =
     (BB.add bb content >> return False) `CE.catch` handleErrorCall
     where handleErrorCall (ErrorCall _) = return True
 
-prop_tryAddIsANonblockingAdd = morallyDubiousIOProperty . propIO_tryAddIsANonblockingAdd
+prop_tryAddIsANonblockingAdd = ioProperty . propIO_tryAddIsANonblockingAdd
 
 propIO_tryAddIsANonblockingAdd :: ([Content], Int) -> IO Bool
 propIO_tryAddIsANonblockingAdd (contents, capacity) =

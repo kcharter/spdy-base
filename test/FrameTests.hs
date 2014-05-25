@@ -5,7 +5,6 @@ import Data.Monoid
 import Test.Framework (Test, testGroup, plusTestOptions, topt_maximum_generated_tests)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
-import Test.QuickCheck.Property (morallyDubiousIOProperty)
 import Codec.Zlib (initDeflateWithDictionary,
                    initInflateWithDictionary)
 
@@ -27,9 +26,9 @@ test = testGroup "Frame tests" [
   ]
   where opts = mempty { topt_maximum_generated_tests = Just 1000 }
 
-prop_toRawFrameAndBack :: Frame -> Gen Prop
+prop_toRawFrameAndBack :: Frame -> Property
 prop_toRawFrameAndBack frame =
-  morallyDubiousIOProperty $
+  ioProperty $
   either (const False) (frame ==) <$>
   (toFrame' =<< toRawFrame' frame)
 
