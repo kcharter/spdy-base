@@ -1,8 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
+import Control.Applicative
 import qualified Data.ByteString as B
 import Data.String (fromString)
 import System.IO (hFlush, stdout, stderr, BufferMode(..), hSetBuffering)
@@ -13,11 +13,19 @@ import Network.SPDY.Client
 import Network.SPDY.Endpoint (forContent, isLast)
 import Network.SPDY.Frames (HeaderBlock(..), HeaderName(..), HeaderValue(..))
 
-defineOptions "Opts" $ do
-  stringOption "optHost" "host" "localhost" "The host name or IP address of the server."
-  intOption "optPort" "port" 10041 "The server port."
-  stringOption "optPath" "path" "/hello.html" "The path of the resource to get."
-  boolOption "optNoTLS" "no-tls" False "Don't use TLS, just an ordinary unencrypted network connection."
+data ProgOptions =
+  ProgOptions { optHost :: String,
+                optPort :: Int,
+                optPath :: String,
+                optNoTLS :: Bool }
+
+instance Options ProgOptions where
+  defineOptions =
+    pure ProgOptions
+    <*> simpleOption "host" "localhost" "The host name or IP address of the server."
+    <*> simpleOption "port" 10041 "The server port."
+    <*> simpleOption "path" "/hello.html" "The path of the resource to get."
+    <*> simpleOption "no-tls" False "Don't use TLS, just an ordinary unencrypted network connection."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do

@@ -1,8 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
+import Control.Applicative
 import Control.Concurrent (forkIO, killThread)
 import qualified Control.Exception as CE
 import Control.Monad (unless)
@@ -21,17 +21,22 @@ import qualified Network.TLS as TLS
 
 import Network.SPDY.Server
 
-defineOptions "Opts" $ do
-  stringOption "optCertFile" "cert-file" "server-cert.pem" $
-    "The certificate file to use for TLS. Default is 'server-cert.pem'."
-  stringOption "optKeyFile" "key-file" "server-private-key.pem" $
-    "The private key file to use for TLS. Default is 'server-private-key.pem'."
-  intOption "optPort" "port" 16000 $
-    "The port on which to accept incoming connections. " ++
-    "Default is 16000."
-  stringOption "optStaticDir" "static-dir" "." $
-    "The static directory from which to serve files."
-  boolOption "optNoTLS" "no-tls" False "Don't use TLS."
+data ProgOptions =
+  ProgOptions { optCertFile :: String,
+                optKeyFile :: String,
+                optPort :: Int,
+                optStaticDir :: String,
+                optNoTLS :: Bool }
+
+instance Options ProgOptions where
+  defineOptions =
+    pure ProgOptions
+    <*> simpleOption "cert-file" "server-cert.pem" "The certificate file to use for TLS. Default is 'server-cert.pem'."
+    <*> simpleOption "key-file" "server-private-key.pem" ("The private key file to use for TLS. " ++
+                                                          "Default is 'server-private-key.pem'.")
+    <*> simpleOption "port" 16000 "The port on which to accept incoming connections. Default is 16000."
+    <*> simpleOption "static-dir" "." "The static directory from which to serve files."
+    <*> simpleOption "no-tls" False "Don't use TLS."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do

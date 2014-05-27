@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
+import Control.Applicative
 import Control.Concurrent (forkIO, killThread)
 import Control.Monad (liftM, when)
 import qualified Data.ByteString.Char8 as C8
@@ -22,10 +22,17 @@ import Data.PEM (pemParseLBS, pemContent)
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLSX
 
-defineOptions "Opts" $ do
-  stringOption "optCertFile" "cert-file" "server-cert.pem" "The certificate file for the server."
-  stringOption "optKeyFile" "key-file" "server-private-key.pem" "The private key file for the server."
-  intOption "optPort" "port" 15000 "The port number on which to accept incoming connections."
+data ProgOptions =
+  ProgOptions { optCertFile :: String,
+                optKeyFile :: String,
+                optPort :: Int }
+
+instance Options ProgOptions where
+  defineOptions =
+    pure ProgOptions
+    <*> simpleOption "cert-file" "server-cert.pem" "The certificate file for the server."
+    <*> simpleOption "key-file" "server-private-key.pem" "The private key file for the server."
+    <*> simpleOption "port" 15000 "The port number on which to accept incoming connections."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do

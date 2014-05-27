@@ -1,7 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Main where
 
+import Control.Applicative
 import Control.Monad (liftM)
 import qualified Data.ByteString.Char8 as C8
 import Network
@@ -13,10 +12,17 @@ import qualified Crypto.Random as CR
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLSX
 
-defineOptions "Opts" $ do
-  stringOption "optServer" "server" "localhost" "Server name or IP address."
-  intOption "optPort" "port" 15000 "Server port to connect to."
-  stringOption "optProtocol" "protocol" "hello" "Protocol to negotiate with the server."
+data ProgOptions =
+  ProgOptions { optServer :: String,
+                optPort :: Int,
+                optProtocol :: String }
+
+instance Options ProgOptions where
+  defineOptions =
+    pure ProgOptions
+    <*> simpleOption "server" "localhost" "Server name or IP address."
+    <*> simpleOption "port" 15000 "Server port to connect to."
+    <*> simpleOption "protocol" "hello" "Protocol to negotiate with the server."
 
 main :: IO ()
 main = runCommand $ \opts _ -> do
